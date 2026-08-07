@@ -35,6 +35,7 @@ services:
       PGDATABASE: ${PGDATABASE}
     ports:
       - "8000:8000"
+      - "8683:8683/udp"
     volumes:
       - ./keys:/app/keys:ro
     depends_on:
