@@ -12,8 +12,9 @@
 // ============================ NETWORK ============================
 const char *WIFI_SSID = "FIK-Hotspot";
 const char *WIFI_PASSWORD = "T4nahairku";
-
-IPAddress coapServerIp(103, 147, 92, 179);
+// 172.25.21.231
+// IPAddress coapServerIp(103, 147, 92, 179);
+IPAddress coapServerIp(172, 25, 21, 231);
 const uint16_t coapServerPort = 8683;
 
 // ============================ INTERVALS ============================
@@ -22,7 +23,7 @@ const unsigned long OBSERVE_REFRESH_INTERVAL = 3600000; // Refresh observe tiap 
 
 // ============================ GLOBALS ============================
 struct ActuatorState {
-  int pump_status = 0;
+  int pump_status = 1;
   int light_status = 1;      // Default: lampu menyala (1 = ON)
   int automation_status = 1; // Default: auto mode
 } state;
@@ -69,8 +70,8 @@ void setup() {
   digitalWrite(RELAY_PUMP_1, HIGH);
   digitalWrite(RELAY_PUMP_2, HIGH);
 
-  // Trik untuk menangkap notifikasi (packet CON/NON tanpa URI PATH)
-  coap.server(callback_response, "");
+  // Mendaftarkan callback untuk menerima notifikasi Observe & balasan
+  coap.response(callback_response);
   
   // Connect WiFi
   connectWifi();
@@ -251,8 +252,8 @@ void callback_response(CoapPacket &packet, IPAddress ip, int port) {
   Serial.println("Menerima pesan dari server!");
 
   if (packet.type == COAP_CON) {
-      Serial.println("Tipe paket: Confirmable. Membalas ACK...");
-      coap.sendResponse(ip, port, packet.messageid);
+      Serial.println("Tipe paket: Confirmable. Auto-ACK dikirim oleh library (Empty ACK).");
+      // coap.sendResponse(ip, port, packet.messageid); // Dihapus karena sudah auto-ACK di library
   }
 
   if (packet.payloadlen > 0) {
