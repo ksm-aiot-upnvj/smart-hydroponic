@@ -209,6 +209,9 @@ async def control_hydroponic_actuators(
         if actuator_res:
             actuator_res.latest_state = json.dumps(command_payload).encode("utf-8")
             actuator_res.updated_state()
+            logging.getLogger(__name__).info(
+                f"[CoAP Debug] Mengirim notifikasi Observe ke aktuator: {command_payload}"
+            )
             confirmed = True
         else:
             confirmed = False

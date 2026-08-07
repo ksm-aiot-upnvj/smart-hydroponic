@@ -36,6 +36,10 @@ handler.setFormatter(
 logging.basicConfig(level=logging.INFO, handlers=[handler])
 logger = logging.getLogger(__name__)
 
+# Sembunyikan log internal aiocoap agar terminal bersih
+logging.getLogger("coap-server").setLevel(logging.WARNING)
+logging.getLogger("aiocoap").setLevel(logging.WARNING)
+
 
 def get_project_version():
     try:

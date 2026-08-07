@@ -40,6 +40,19 @@ class HydroponicCoAPResource(resource.ObservableResource):
         HydroponicCoAPResource._instances[role] = self
 
     async def render_get(self, request):
+        client_ip = (
+            request.remote.sockaddr[0]
+            if request.remote and hasattr(request.remote, "sockaddr")
+            else "Unknown"
+        )
+        if request.opt.observe == 0:
+            logger.info(
+                f"[CoAP Debug] Node {client_ip} berhasil mendaftar Observe ke '{self.role}'"
+            )
+        else:
+            logger.info(
+                f"[CoAP Debug] Node {client_ip} meminta GET (tanpa Observe) ke '{self.role}'"
+            )
         return aiocoap.Message(payload=self.latest_state)
 
     async def render_put(self, request):
