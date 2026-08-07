@@ -33,6 +33,7 @@ services:
       PGUSER: ${PGUSER}
       PGPASSWORD: ${PGPASSWORD}
       PGDATABASE: ${PGDATABASE}
+      COAP_HOST: "0.0.0.0"
     ports:
       - "8000:8000"
       - "8683:8683/udp"
