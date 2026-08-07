@@ -376,8 +376,10 @@ const toggleControl = async (type: ControlType) => {
   controlStatusType.value = "";
 
   try {
-    const response =
-      await HydroponicsService.controlHydroponicActuators(getActuatorPayload(), "coap");
+    const response = await HydroponicsService.controlHydroponicActuators(
+      getActuatorPayload(),
+      "coap",
+    );
     mapLatestControlState(response);
     controlStatusMessage.value = "Kontrol berhasil diperbarui.";
     controlStatusType.value = "success";

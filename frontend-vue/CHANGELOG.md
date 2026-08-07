@@ -4,9 +4,9 @@
 
 ### Bug Fixes
 
-* resolve missing nutrition service calls and update api generated models ([87e7ffb](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/87e7ffb50ccf1b4024dff22d305482fb66eed5e6))
-* resolve server deployment errors and apply formatter ([11cfc26](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/11cfc26f0b4e1ededb2f000c2c2f778f2ef17baf))
-* resolve server deployment errors and apply formatter ([d2f6b7c](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/d2f6b7c82406f4b955d95d15a03bc2874f4aecf8))
+- resolve missing nutrition service calls and update api generated models ([87e7ffb](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/87e7ffb50ccf1b4024dff22d305482fb66eed5e6))
+- resolve server deployment errors and apply formatter ([11cfc26](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/11cfc26f0b4e1ededb2f000c2c2f778f2ef17baf))
+- resolve server deployment errors and apply formatter ([d2f6b7c](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/d2f6b7c82406f4b955d95d15a03bc2874f4aecf8))
 
 ## [1.2.0](https://github.com/IoT-Smart-Hydroponic/smart-hydroponic/compare/frontend-v1.1.0...frontend-v1.2.0) (2026-05-19)
 
