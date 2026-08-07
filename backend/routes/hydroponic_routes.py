@@ -181,11 +181,11 @@ async def control_hydroponic_actuators(
     transport: str = "websocket",
     current_user: UserOut = Depends(get_current_user),
 ) -> HydroponicControlResult:
-    """Forward dashboard commands to the actuator and wait for device ACK.
+    """Forward dashboard commands to the actuator via WebSocket or CoAP Observe.
 
-    This supports Scenario 3 evaluation. The command is tagged with a
-    command_id, then sent to the actuator using WebSocket or CoAP. CoAP mode is
-    selected with `?transport=coap`.
+    The command is pushed directly to the actuator based on the requested
+    transport protocol. CoAP mode is selected with `?transport=coap` and
+    updates the actuator state via the CoAP Observe pattern.
     """
     require_role(current_user, {"admin", "superadmin"})
     if transport not in {"websocket", "coap"}:
