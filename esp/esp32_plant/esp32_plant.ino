@@ -33,7 +33,7 @@ const char *coapPath = "coap/hydroponics/plant";
 // ============================ INTERVALS ============================
 const unsigned long FLOW_INTERVAL = 1000;
 const unsigned long ULTRASONIC_INTERVAL = 1000;
-const unsigned long SEND_INTERVAL = 5000;
+const unsigned long SEND_INTERVAL = 30000;
 const unsigned long WIFI_RETRY_INTERVAL = 5000;
 
 // ============================ GLOBALS ============================

@@ -12,9 +12,9 @@
 // ============================ NETWORK ============================
 const char *WIFI_SSID = "FIK-Hotspot";
 const char *WIFI_PASSWORD = "T4nahairku";
-// 172.25.21.231
-// IPAddress coapServerIp(103, 147, 92, 179);
-IPAddress coapServerIp(172, 25, 21, 231);
+
+IPAddress coapServerIp(103, 147, 92, 179);
+// IPAddress coapServerIp(172, 25, 21, 231);
 const uint16_t coapServerPort = 8683;
 
 // ============================ INTERVALS ============================
