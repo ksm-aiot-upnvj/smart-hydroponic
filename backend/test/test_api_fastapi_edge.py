@@ -155,6 +155,37 @@ def test_hydroponic_latest_no_data(client: TestClient, monkeypatch: pytest.Monke
     assert response.status_code == 204
 
 
+def test_hydroponic_latest_with_actuator_status(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    _set_current_user_override(role="admin")
+
+    dummy_out = HydroponicOut(
+        dataid=uuid7(),
+        flowrate=1.5,
+        distance_cm=10.0,
+        total_litres=5.0,
+        ph=6.5,
+        tds=800.0,
+        pump_status=True,
+        light_status=False,
+        automation_status=True,
+    )
+
+    async def fake_get_latest_data(_self):
+        return dummy_out
+
+    monkeypatch.setattr(HydroponicService, "get_latest_data", fake_get_latest_data)
+
+    response = client.get("/hydroponics/data/latest")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["pump_status"] is True
+    assert data["light_status"] is False
+    assert data["automation_status"] is True
+
+
 def test_hydroponic_specific_forbidden_for_user_role(client: TestClient):
     _set_current_user_override(role="user")
 

@@ -154,5 +154,8 @@ class HydroponicDashboardOut(BaseModel):
     humidity_avg: Optional[float] = None
     ph: Optional[float] = None
     tds: Optional[float] = None
+    pump_status: Optional[bool] = None
+    light_status: Optional[bool] = None
+    automation_status: Optional[bool] = None
 
     model_config = ConfigDict(from_attributes=True)

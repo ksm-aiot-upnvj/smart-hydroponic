@@ -314,6 +314,9 @@ def test_get_latest_hydroponic_data(
         "humidity_avg": sample.humidity_avg,
         "ph": sample.ph,
         "tds": sample.tds,
+        "pump_status": sample.pump_status,
+        "light_status": sample.light_status,
+        "automation_status": sample.automation_status,
     }
 
 
