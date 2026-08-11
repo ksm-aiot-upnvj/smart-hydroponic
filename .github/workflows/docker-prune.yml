@@ -1,0 +1,76 @@
+name: Prune old release tags (keep N)
+
+on:
+  schedule:
+    - cron: "0 18 * * 0"
+  workflow_dispatch:
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        repo:
+          - "smart-hydroponic-backend"
+          - "smart-hydroponic-frontend"
+    env:
+      DH_USER: ${{ secrets.DOCKER_USERNAME }}
+      DH_PASS: ${{ secrets.DOCKER_RELEASE }}
+      REPO: ${{ matrix.repo }}
+      KEEP: "5"
+    steps:
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Get JWT
+        id: auth
+        run: |
+          PAYLOAD=$(jq -n --arg u "$DH_USER" --arg p "$DH_PASS" '{username: $u, password: $p}')
+          TOKEN=$(curl -s -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            https://hub.docker.com/v2/users/login/ | jq -r .token)
+          [ -z "$TOKEN" -o "$TOKEN" = "null" ] && { echo "Login failed"; exit 1; }
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Prune per variant
+        env:
+          TOKEN: ${{ steps.auth.outputs.token }}
+        shell: bash
+        run: |
+          fetch_tags() {
+            local page=1
+            while :; do
+              RES=$(curl -s -H "Authorization: JWT $TOKEN" \
+                "https://hub.docker.com/v2/repositories/$DH_USER/$REPO/tags?page_size=100&page=$page")
+              echo "$RES"
+              NEXT=$(echo "$RES" | jq -r .next)
+              [ "$NEXT" = "null" ] && break
+              page=$((page+1))
+            done
+          }
+
+          # Ambil semua tag sekaligus
+          ALL=$(fetch_tags)
+
+          echo "=== Pruning old tags for $REPO ==="
+          # Ambil hanya tag rilis (diawali dengan 'backend-v', 'frontend-v', atau 'v'), abaikan 'latest'
+          LIST=$(echo "$ALL" | jq -r '
+            .results[]
+            | select(.name | test("^(backend-v|frontend-v|v)"))
+            | [.name, .last_updated] | @tsv
+          ' | sort -k2 -r)
+
+          # Simpan N terbaru, hapus sisanya
+          COUNT=0
+          while IFS=$'\t' read -r NAME UPDATED; do
+            [ -z "$NAME" ] && continue
+            COUNT=$((COUNT+1))
+            if [ "$COUNT" -le "$KEEP" ]; then
+              echo "keep  $NAME ($UPDATED)"
+            else
+              echo "delete $NAME"
+              curl -s -X DELETE -H "Authorization: JWT $TOKEN" \
+                "https://hub.docker.com/v2/repositories/$DH_USER/$REPO/tags/$NAME/" > /dev/null
+            fi
+          done <<< "$LIST"
