@@ -338,9 +338,9 @@ const loadActiveNutritionProfile = async () => {
 
 // --- LOGIKA KONTROL & METRIK ---
 const controls = reactive({
-  automation: true,
-  pump: true,
-  light: true,
+  automation: false,
+  pump: false,
+  light: false,
 });
 
 type ControlType = keyof typeof controls;
@@ -349,10 +349,20 @@ const isControlUpdating = ref(false);
 const controlStatusMessage = ref("");
 const controlStatusType = ref<"success" | "error" | "">("");
 
-const mapLatestControlState = (payload: HydroponicDataActuator) => {
-  controls.automation = payload.automation_status ?? controls.automation;
-  controls.pump = payload.pump_status ?? controls.pump;
-  controls.light = payload.light_status ?? controls.light;
+const mapLatestControlState = (payload: {
+  automation_status?: boolean | null;
+  pump_status?: boolean | null;
+  light_status?: boolean | null;
+}) => {
+  if (typeof payload.automation_status === "boolean") {
+    controls.automation = payload.automation_status;
+  }
+  if (typeof payload.pump_status === "boolean") {
+    controls.pump = payload.pump_status;
+  }
+  if (typeof payload.light_status === "boolean") {
+    controls.light = payload.light_status;
+  }
 };
 
 const getActuatorPayload = (): HydroponicDataActuator => ({
@@ -434,6 +444,10 @@ const refreshLatestMetrics = async () => {
       setMetricValue(5, formatMetric(data.humidity_avg, 1));
       setMetricValue(6, formatMetric(data.tds, 3));
       setMetricValue(7, formatMetric(data.ph, 2));
+
+      if (!isControlUpdating.value) {
+        mapLatestControlState(data);
+      }
     }
   } catch (error) {
     getApiErrorMessage(error, "Gagal memuat metrik terbaru.");

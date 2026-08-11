@@ -11,4 +11,7 @@ export type HydroponicDashboardOut = {
   humidity_avg?: number | null;
   ph?: number | null;
   tds?: number | null;
+  pump_status?: boolean | null;
+  light_status?: boolean | null;
+  automation_status?: boolean | null;
 };
