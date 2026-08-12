@@ -348,6 +348,8 @@ type ControlType = keyof typeof controls;
 const isControlUpdating = ref(false);
 const controlStatusMessage = ref("");
 const controlStatusType = ref<"success" | "error" | "">("");
+const lastManualControlTime = ref<number>(0);
+const MANUAL_CONTROL_COOLDOWN_MS = 40000;
 
 const mapLatestControlState = (payload: {
   automation_status?: boolean | null;
@@ -379,7 +381,7 @@ const toggleControl = async (type: ControlType) => {
     pump: controls.pump,
     light: controls.light,
   };
-  previousState[type] = !previousState[type];
+  previousState[type] = !controls[type];
 
   isControlUpdating.value = true;
   controlStatusMessage.value = "";
@@ -391,6 +393,7 @@ const toggleControl = async (type: ControlType) => {
       "coap",
     );
     mapLatestControlState(response);
+    lastManualControlTime.value = Date.now();
     controlStatusMessage.value = "Kontrol berhasil diperbarui.";
     controlStatusType.value = "success";
   } catch (error) {
@@ -446,7 +449,27 @@ const refreshLatestMetrics = async () => {
       setMetricValue(7, formatMetric(data.ph, 2));
 
       if (!isControlUpdating.value) {
-        mapLatestControlState(data);
+        const isMatch =
+          (data.automation_status === undefined ||
+            data.automation_status === null ||
+            data.automation_status === controls.automation) &&
+          (data.pump_status === undefined ||
+            data.pump_status === null ||
+            data.pump_status === controls.pump) &&
+          (data.light_status === undefined ||
+            data.light_status === null ||
+            data.light_status === controls.light);
+
+        if (isMatch) {
+          lastManualControlTime.value = 0;
+        }
+
+        const isWithinCooldown =
+          Date.now() - lastManualControlTime.value < MANUAL_CONTROL_COOLDOWN_MS;
+
+        if (!isWithinCooldown) {
+          mapLatestControlState(data);
+        }
       }
     }
   } catch (error) {
