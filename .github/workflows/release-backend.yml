@@ -15,7 +15,7 @@ jobs:
     if: github.repository == 'ksm-aiot-upnvj/smart-hydroponic' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     concurrency:
-      group: release-dev-python
+      group: release-main
       cancel-in-progress: false
     permissions:
       contents: write
@@ -43,6 +43,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Pull latest changes
+        run: git pull origin main --rebase
 
       - name: Run Semantic Release
         env:
