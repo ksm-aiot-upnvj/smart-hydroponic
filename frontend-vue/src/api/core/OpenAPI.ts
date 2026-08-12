@@ -20,7 +20,7 @@ export type OpenAPIConfig = {
 };
 
 export const OpenAPI: OpenAPIConfig = {
-  BASE: "http://127.0.0.1:8000/smart-hydroponic/api/v2",
+  BASE: "/smart-hydroponic/api/v2",
   VERSION: "2.0.0",
   WITH_CREDENTIALS: false,
   CREDENTIALS: "include",

@@ -11,4 +11,12 @@ export default defineConfig({
       "@": path.resolve(__dirname, "src"),
     },
   },
+  server: {
+    proxy: {
+      "/smart-hydroponic": {
+        target: process.env.VITE_API_TARGET || "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
+    },
+  },
 });
