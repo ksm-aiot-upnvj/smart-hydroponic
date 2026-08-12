@@ -43,7 +43,7 @@ build_command = """
     uv lock --upgrade-package "$PACKAGE_NAME"
     git add uv.lock
 """
-commit_message = "chore(release): bump to {version}"
+commit_message = "chore(release): bump to {version} [skip ci]"
 
 [tool.semantic_release.branches.main]
 match = "main"
