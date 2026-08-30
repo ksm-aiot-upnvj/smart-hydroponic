@@ -6,13 +6,8 @@ from schemas import (
     HydroponicDataPlant,
     HydroponicDataEnvironment,
     HydroponicDataActuator,
-    HydroponicIn,
 )
-from utils.deps import get_db_session
 from utils.aggregator import HydroponicAggregator
-from services.hydroponic_service import HydroponicService
-from services.nutrition_service import NutritionService
-from utils.actuator_control import build_actuator_control_payload
 
 logger = logging.getLogger(__name__)
 
@@ -56,68 +51,95 @@ class HydroponicCoAPResource(resource.ObservableResource):
         return aiocoap.Message(payload=self.latest_state)
 
     async def render_put(self, request):
+        client_ip = (
+            request.remote.sockaddr[0]
+            if request.remote and hasattr(request.remote, "sockaddr")
+            else "Unknown"
+        )
         try:
-            payload = request.payload.decode("utf-8")
-            data_json = json.loads(payload)
+            try:
+                payload = request.payload.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                logger.warning(
+                    "[CoAP] Non-UTF-8 payload from %s/%s: %s",
+                    client_ip,
+                    self.role,
+                    exc,
+                )
+                return aiocoap.Message(
+                    code=aiocoap.BAD_REQUEST, payload=b"Invalid payload encoding"
+                )
+
+            try:
+                data_json = json.loads(payload)
+            except json.JSONDecodeError as exc:
+                logger.warning(
+                    "[CoAP] Invalid JSON from %s/%s: %s",
+                    client_ip,
+                    self.role,
+                    exc,
+                )
+                return aiocoap.Message(
+                    code=aiocoap.BAD_REQUEST, payload=b"Invalid JSON"
+                )
 
             logger.info(
-                f"[CoAP Handler] Menerima payload dari node '{self.role}': {data_json}"
+                f"[CoAP Handler] Menerima payload dari node '{self.role}' ({client_ip}): {data_json}"
             )
 
-            if self.validator:
+            if self.validator is None:
+                ack_payload = json.dumps({"status": "ack", "role": self.role}).encode(
+                    "utf-8"
+                )
+                return aiocoap.Message(code=aiocoap.CHANGED, payload=ack_payload)
+
+            try:
                 data = self.validator.model_validate(data_json)
-                logger.info(
-                    f"[CoAP Handler] Data dari node '{self.role}' sedang divalidasi"
+            except Exception as exc:
+                logger.warning(
+                    "[CoAP] Schema validation failed for %s/%s: %s. Payload: %s",
+                    client_ip,
+                    self.role,
+                    exc,
+                    data_json,
                 )
-                snapshot = await self.aggregator.gather_data(
-                    self.role, data.model_dump()
+                err_body = json.dumps(
+                    {"status": "error", "detail": "Validation failed"}
+                ).encode("utf-8")
+                return aiocoap.Message(code=aiocoap.BAD_REQUEST, payload=err_body)
+
+            logger.info(
+                f"[CoAP Handler] Data dari node '{self.role}' sedang divalidasi"
+            )
+
+            buffered = await self.aggregator.gather_data(
+                self.role, data.model_dump()
+            )
+
+            if not buffered:
+                rate_limited_body = json.dumps(
+                    {"status": "dropped", "reason": "rate_limited_or_ring_full"}
+                ).encode("utf-8")
+                return aiocoap.Message(
+                    code=aiocoap.SERVICE_UNAVAILABLE,
+                    payload=rate_limited_body,
                 )
-
-                if snapshot:
-                    logger.info("[CoAP Handler] Data berhasil digather")
-                    snapshot_payload = snapshot.model_dump()
-
-                    async with get_db_session() as session:
-                        nutrition_service = NutritionService(session)
-                        active_profile = await nutrition_service.get_active_profile()
-
-                        actuator_payload = build_actuator_control_payload(
-                            snapshot_payload, active_profile
-                        )
-                        snapshot_payload.update(
-                            {
-                                "pump_status": actuator_payload["pump_status"],
-                                "light_status": actuator_payload["light_status"],
-                                "automation_status": actuator_payload[
-                                    "automation_status"
-                                ],
-                            }
-                        )
-
-                        actuator_res = HydroponicCoAPResource._instances.get("actuator")
-                        if actuator_res:
-                            self.aggregator.update_actuator_state(actuator_payload)
-                            actuator_res.latest_state = json.dumps(
-                                actuator_payload
-                            ).encode("utf-8")
-                            actuator_res.updated_state()
-
-                        logger.info(f"[CoAP Handler] Data snapshot: {snapshot_payload}")
-
-                        service = HydroponicService(session)
-                        await service.add_data(
-                            HydroponicIn.model_validate(snapshot_payload)
-                        )
 
             ack_payload = json.dumps(
                 {
                     "status": "ack",
+                    "queued": self.aggregator.process_queue.qsize(),
                 }
             ).encode("utf-8")
             return aiocoap.Message(code=aiocoap.CHANGED, payload=ack_payload)
 
-        except Exception as e:
-            logger.error(f"[COAP][ERROR] {e}")
+        except Exception:
+            logger.exception(
+                "[CoAP][ERROR] Unhandled error in render_put for role='%s' (%s)",
+                self.role,
+                client_ip,
+            )
             return aiocoap.Message(
-                code=aiocoap.INTERNAL_SERVER_ERROR, payload=b"Error processing data"
+                code=aiocoap.INTERNAL_SERVER_ERROR,
+                payload=b"Internal server error",
             )
