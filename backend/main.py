@@ -17,6 +17,7 @@ import aiocoap.resource as resource
 from contextlib import asynccontextmanager
 from routes.coap_handler import HydroponicCoAPResource
 from utils.aggregator import aggregator
+from utils.pipeline import SnapshotPipeline
 import logging
 import colorlog
 
@@ -36,7 +37,6 @@ handler.setFormatter(
 logging.basicConfig(level=logging.INFO, handlers=[handler])
 logger = logging.getLogger(__name__)
 
-# Sembunyikan log internal aiocoap agar terminal bersih
 logging.getLogger("coap-server").setLevel(logging.WARNING)
 logging.getLogger("aiocoap").setLevel(logging.WARNING)
 
@@ -53,6 +53,14 @@ def get_project_version():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("Starting real-time monitoring pipeline...")
+
+    aggregator.start_background_tasks()
+
+    pipeline = SnapshotPipeline(aggregator=aggregator, room="hydroponics")
+    pipeline.start()
+    app.state.snapshot_pipeline = pipeline
+
     logger.info("Starting CoAP server...")
 
     root = resource.Site()
@@ -86,10 +94,21 @@ async def lifespan(app: FastAPI):
         root, bind=(coap_host, 8683)
     )
 
+    logger.info(
+        "Pipeline ready: aggregator drain-loop + %d snapshot workers running.",
+        2,
+    )
+
     yield
 
-    logger.info("Shutting down CoAP server...")
+    logger.info("Shutting down real-time monitoring pipeline...")
+
     await coap_context.shutdown()
+
+    await pipeline.stop()
+    await aggregator.stop_background_tasks()
+
+    logger.info("Pipeline shutdown complete.")
 
 
 app = FastAPI(
