@@ -1,4 +1,5 @@
 import asyncio
+import os
 import time
 import logging
 from collections import deque
@@ -11,10 +12,11 @@ from schemas import HydroponicIn
 logger = logging.getLogger(__name__)
 
 _PROFILE_CACHE_TTL = 30.0
-
 _RING_BUFFER_SIZE = 256
-
 _PROCESS_QUEUE_MAXSIZE = 4096
+
+_DEFAULT_MIN_INTERVAL = float(os.getenv("HYDROPONIC_MIN_INTERVAL_SECONDS", "0.1"))
+_DEFAULT_PAIR_TIMEOUT = float(os.getenv("HYDROPONIC_PAIR_TIMEOUT_SECONDS", "60.0"))
 
 
 @dataclass(order=True)
@@ -25,11 +27,31 @@ class PendingPacket:
     received_at: float = field(compare=False, default_factory=time.monotonic)
 
 
+async def _best_effort_log(
+    *, event_type: str, severity: str, description: str, data_ref: str | None = None
+) -> None:
+    """Fire-and-forget structured log write; never raises into caller."""
+    try:
+        from utils.deps import get_db_session
+        from services.log_service import LogService
+
+        async with get_db_session() as session:
+            svc = LogService(session)
+            await svc.write_log(
+                event_type=event_type,
+                severity=severity,
+                description=description,
+                data_ref=data_ref,
+            )
+    except Exception:
+        logger.exception("[Aggregator] Failed to write log entry: %s", description)
+
+
 class HydroponicAggregator:
     def __init__(
         self,
-        timeout: float = 60.0,
-        min_interval: float = 0.1,
+        timeout: float = _DEFAULT_PAIR_TIMEOUT,
+        min_interval: float = _DEFAULT_MIN_INTERVAL,
         ring_size: int = _RING_BUFFER_SIZE,
         queue_maxsize: int = _PROCESS_QUEUE_MAXSIZE,
     ):
@@ -62,6 +84,9 @@ class HydroponicAggregator:
         self._drain_task: asyncio.Task | None = None
         self._drain_stop_event: asyncio.Event = asyncio.Event()
         self._last_pair_ts: float = 0.0
+
+        self._last_drop_log_at: dict[str, float] = {}
+        self._drop_log_min_interval: float = 5.0
 
     # ------------------------------------------------------------------
     # Lifespan helpers
@@ -131,6 +156,21 @@ class HydroponicAggregator:
         self._profile_cached_at = 0.0
 
     # ------------------------------------------------------------------
+    # Drop-log throttling helper
+    # ------------------------------------------------------------------
+
+    def _should_log_drop(self, key: str) -> bool:
+        """Rate-limit our own drop-logging so a sustained flood doesn't
+        also flood the logs table. Returns True if enough time has passed
+        since we last wrote a log entry for this drop `key`."""
+        now = time.monotonic()
+        last = self._last_drop_log_at.get(key, 0.0)
+        if now - last >= self._drop_log_min_interval:
+            self._last_drop_log_at[key] = now
+            return True
+        return False
+
+    # ------------------------------------------------------------------
     # Data gathering (public entry point)
     # ------------------------------------------------------------------
 
@@ -151,19 +191,45 @@ class HydroponicAggregator:
                         delta,
                         self.min_interval,
                     )
+                    if self._should_log_drop(f"rate_limit:{source}"):
+                        asyncio.create_task(
+                            _best_effort_log(
+                                event_type="system",
+                                severity="warning",
+                                description=(
+                                    f"Rate-limit drop on '{source}' "
+                                    f"({delta:.3f}s < {self.min_interval:.3f}s min interval). "
+                                    "Further repeats in the next "
+                                    f"{self._drop_log_min_interval:.0f}s window are suppressed."
+                                ),
+                            )
+                        )
                     return False
             self.last_received[source] = now
 
             buf = self._buffers[source]
             if len(buf) == buf.maxlen:
                 dropped = buf.popleft()
+                age = now - dropped.received_at
                 logger.warning(
                     "[Aggregator] Ring buffer full for '%s'; dropped oldest packet "
                     "from %.2fs ago. Consider raising ring_size or lowering "
                     "publish rate.",
                     source,
-                    now - dropped.received_at,
+                    age,
                 )
+                if self._should_log_drop(f"ring_full:{source}"):
+                    asyncio.create_task(
+                        _best_effort_log(
+                            event_type="system",
+                            severity="error",
+                            description=(
+                                f"Ring buffer full for '{source}'; oldest packet "
+                                f"({age:.2f}s old) dropped. Consumer may be falling "
+                                "behind or publish rate is too high."
+                            ),
+                        )
+                    )
 
             pkt = PendingPacket(
                 priority=now,
@@ -182,6 +248,8 @@ class HydroponicAggregator:
     # ------------------------------------------------------------------
 
     async def _try_pair_snapshots(self) -> None:
+        stale_events: list[tuple[str, float]] = []
+
         async with self._buffer_lock:
             plant_buf = self._buffers["plant"]
             env_buf = self._buffers["environment"]
@@ -194,18 +262,22 @@ class HydroponicAggregator:
                 if abs(plant_pkt.received_at - env_pkt.received_at) > self.timeout:
                     if plant_pkt.received_at < env_pkt.received_at:
                         dropped = plant_buf.popleft()
+                        age = env_pkt.received_at - dropped.received_at
                         logger.warning(
                             "[Aggregator] Stale 'plant' packet dropped "
                             "(%.2fs older than oldest 'environment').",
-                            env_pkt.received_at - dropped.received_at,
+                            age,
                         )
+                        stale_events.append(("plant", age))
                     else:
                         dropped = env_buf.popleft()
+                        age = plant_pkt.received_at - dropped.received_at
                         logger.warning(
                             "[Aggregator] Stale 'environment' packet dropped "
                             "(%.2fs older than oldest 'plant').",
-                            plant_pkt.received_at - dropped.received_at,
+                            age,
                         )
+                        stale_events.append(("environment", age))
                     continue
 
                 plant_buf.popleft()
@@ -219,6 +291,20 @@ class HydroponicAggregator:
                 logger.info(
                     "[Aggregator] Paired %d snapshot(s). Queued for processing.",
                     paired_count,
+                )
+
+        for source, age in stale_events:
+            if self._should_log_drop(f"stale_pair:{source}"):
+                asyncio.create_task(
+                    _best_effort_log(
+                        event_type="system",
+                        severity="warning",
+                        description=(
+                            f"Stale '{source}' packet dropped during pairing "
+                            f"({age:.2f}s beyond pairing timeout of {self.timeout:.0f}s). "
+                            "Partner source may be silent or delayed."
+                        ),
+                    )
                 )
 
     async def _drain_timeout_loop(self) -> None:
@@ -243,6 +329,8 @@ class HydroponicAggregator:
 
     async def _partial_flush_if_stale(self) -> None:
         now = time.monotonic()
+        flush_events: list[tuple[str, int, float]] = []
+
         async with self._buffer_lock:
             for source, buf in self._buffers.items():
                 if not buf:
@@ -259,6 +347,21 @@ class HydroponicAggregator:
                         source,
                         age,
                     )
+                    flush_events.append((source, count_before, age))
+
+        for source, count, age in flush_events:
+            if self._should_log_drop(f"partial_flush:{source}"):
+                asyncio.create_task(
+                    _best_effort_log(
+                        event_type="system",
+                        severity="error",
+                        description=(
+                            f"Partial-flush cleared {count} stale packet(s) from "
+                            f"'{source}' (oldest {age:.2f}s old). Partner source "
+                            "appears silent — check device connectivity."
+                        ),
+                    )
+                )
 
     async def _enqueue_snapshot(self, snapshot: HydroponicIn) -> None:
         payload = {
@@ -268,12 +371,25 @@ class HydroponicAggregator:
         try:
             self.process_queue.put_nowait(payload)
         except asyncio.QueueFull:
+            qsize = self.process_queue.qsize()
             logger.error(
                 "[Aggregator] Process queue full (size=%d); snapshot dropped. "
                 "DB or broadcast worker is unable to keep up. "
                 "Consider increasing queue_maxsize or scaling workers.",
-                self.process_queue.qsize(),
+                qsize,
             )
+            if self._should_log_drop("queue_full"):
+                asyncio.create_task(
+                    _best_effort_log(
+                        event_type="system",
+                        severity="critical",
+                        description=(
+                            f"Process queue full (maxsize reached, size={qsize}); "
+                            f"snapshot dropped (dataid={payload['snapshot'].get('dataid')}). "
+                            "Pipeline workers cannot keep up with ingestion rate."
+                        ),
+                    )
+                )
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -288,4 +404,4 @@ class HydroponicAggregator:
         return HydroponicIn(dataid=uuid7(), **combined)
 
 
-aggregator = HydroponicAggregator(timeout=60.0)
+aggregator = HydroponicAggregator()

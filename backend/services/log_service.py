@@ -104,9 +104,7 @@ class LogService:
             {where_clause}
         """
 
-        count_params = {
-            k: v for k, v in params.items() if k not in ["limit", "offset"]
-        }
+        count_params = {k: v for k, v in params.items() if k not in ["limit", "offset"]}
 
         data_result = await self.session.execute(text(query_data), params)
         count_result = await self.session.execute(text(query_count), count_params)
@@ -117,10 +115,7 @@ class LogService:
                 limit=filters.limit,
                 offset=offset,
             ),
-            data=[
-                LogOut.model_validate(row)
-                for row in data_result.mappings().all()
-            ],
+            data=[LogOut.model_validate(row) for row in data_result.mappings().all()],
         )
 
     async def get_recent_logs(self, limit: int = 50) -> list[LogOut]:

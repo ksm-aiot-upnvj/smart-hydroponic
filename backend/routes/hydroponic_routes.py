@@ -244,7 +244,9 @@ async def hydroponic_data_websocket(device_type: str, websocket: WebSocket):
     """WebSocket endpoint untuk menerima data hidroponik secara real-time.
 
     Receive loop deliberately avoids blocking work (DB, profile fetches,
-    broadcast). It validates, buffers via the aggregator, and acks fast.
+    broadcast). It validates, buffers via the aggregator, then sends exactly
+    one status message per received frame reflecting the real outcome
+    ("ack" if buffered, "dropped" if rate-limited/full, "error" if invalid).
     Background pipeline workers handle persistence and fan-out.
     """
     config = DEVICE_CONFIG.get(device_type)
@@ -317,16 +319,6 @@ async def hydroponic_data_websocket(device_type: str, websocket: WebSocket):
                     pass
                 continue
 
-            try:
-                await websocket.send_json(
-                    {
-                        "status": "ack",
-                        "device_type": device_type,
-                    }
-                )
-            except Exception:
-                pass
-
             if validator_model:
                 try:
                     validated_data = validator_model.model_validate(data)
@@ -338,12 +330,33 @@ async def hydroponic_data_websocket(device_type: str, websocket: WebSocket):
                         role,
                         exc,
                     )
+                    try:
+                        await websocket.send_json(
+                            {"status": "error", "reason": "validation_failed"}
+                        )
+                    except Exception:
+                        pass
                     continue
 
                 buffered = await aggregator.gather_data(
                     source=role,
                     data=validated_data.model_dump(),
                 )
+                try:
+                    await websocket.send_json(
+                        {
+                            "status": "ack" if buffered else "dropped",
+                            "device_type": device_type,
+                            **(
+                                {}
+                                if buffered
+                                else {"reason": "rate_limited_or_buffer_full"}
+                            ),
+                        }
+                    )
+                except Exception:
+                    pass
+
                 if not buffered:
                     logger.debug(
                         "[WS %s] Packet from %s/%s not buffered (rate-limited or ring full).",
@@ -357,6 +370,15 @@ async def hydroponic_data_websocket(device_type: str, websocket: WebSocket):
                     role="actuator",
                     message={"type": "command", "payload": data},
                 )
+                try:
+                    await websocket.send_json(
+                        {
+                            "status": "ack",
+                            "device_type": device_type,
+                        }
+                    )
+                except Exception:
+                    pass
 
     except WebSocketDisconnect:
         await manager.disconnect(room=room, role=role, client_id=session_id)

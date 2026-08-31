@@ -93,9 +93,7 @@ class HydroponicCoAPResource(resource.ObservableResource):
                 await _coap_write_log(
                     event_type="system",
                     severity="warning",
-                    description=(
-                        f"Non-UTF-8 payload on {self.role}: {exc!r}"
-                    ),
+                    description=(f"Non-UTF-8 payload on {self.role}: {exc!r}"),
                     client_ip=client_ip,
                 )
                 return aiocoap.Message(
@@ -159,20 +157,9 @@ class HydroponicCoAPResource(resource.ObservableResource):
                 f"[CoAP Handler] Data dari node '{self.role}' sedang divalidasi"
             )
 
-            buffered = await self.aggregator.gather_data(
-                self.role, data.model_dump()
-            )
+            buffered = await self.aggregator.gather_data(self.role, data.model_dump())
 
             if not buffered:
-                await _coap_write_log(
-                    event_type="system",
-                    severity="warning",
-                    description=(
-                        f"Packet dropped on {self.role}: "
-                        "rate-limited or ring buffer full"
-                    ),
-                    client_ip=client_ip,
-                )
                 rate_limited_body = json.dumps(
                     {"status": "dropped", "reason": "rate_limited_or_ring_full"}
                 ).encode("utf-8")
@@ -199,9 +186,7 @@ class HydroponicCoAPResource(resource.ObservableResource):
                 await _coap_write_log(
                     event_type="system",
                     severity="critical",
-                    description=(
-                        f"Unhandled CoAP PUT error on {self.role}: {exc!r}"
-                    ),
+                    description=(f"Unhandled CoAP PUT error on {self.role}: {exc!r}"),
                     client_ip=client_ip,
                 )
             except Exception:
