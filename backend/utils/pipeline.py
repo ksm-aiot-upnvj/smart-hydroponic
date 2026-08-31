@@ -105,9 +105,7 @@ class SnapshotPipeline:
 
         from utils.actuator_control import build_actuator_control_payload
 
-        actuator_payload = build_actuator_control_payload(
-            snapshot_dict, active_profile
-        )
+        actuator_payload = build_actuator_control_payload(snapshot_dict, active_profile)
 
         for k in ("pump_status", "light_status", "automation_status"):
             if k in actuator_payload:
@@ -138,7 +136,9 @@ class SnapshotPipeline:
             if actuator_payload.get("change_detected") and actuator_payload.get(
                 "automation_status"
             ):
-                change_summary = actuator_payload.get("change_summary", "actuator change")
+                change_summary = actuator_payload.get(
+                    "change_summary", "actuator change"
+                )
                 try:
                     await self._write_log(
                         event_type="automation",
@@ -212,14 +212,13 @@ class SnapshotPipeline:
                     delay,
                 )
                 try:
-                    await asyncio.wait_for(
-                        self._stop_event.wait(), timeout=delay
-                    )
+                    await asyncio.wait_for(self._stop_event.wait(), timeout=delay)
                 except asyncio.TimeoutError:
                     pass
 
         if last_exc is not None:
             from schemas import HydroponicIn
+
             try:
                 HydroponicIn.model_validate(snapshot_dict)
             except Exception:

@@ -15,7 +15,9 @@ class _ClientState:
     def __init__(self, ws: WebSocket, client_id: str):
         self.ws = ws
         self.client_id = client_id
-        self.queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=_PER_CLIENT_QUEUE_MAXSIZE)
+        self.queue: asyncio.Queue[dict] = asyncio.Queue(
+            maxsize=_PER_CLIENT_QUEUE_MAXSIZE
+        )
         self.task: asyncio.Task | None = None
         self.stop_event: asyncio.Event = asyncio.Event()
 
@@ -52,9 +54,7 @@ class _ClientState:
     async def _send_loop(self, on_dead) -> None:
         while not self.stop_event.is_set():
             try:
-                message = await asyncio.wait_for(
-                    self.queue.get(), timeout=0.5
-                )
+                message = await asyncio.wait_for(self.queue.get(), timeout=0.5)
             except asyncio.TimeoutError:
                 continue
 
@@ -89,6 +89,7 @@ class RoomConnectionManager:
             def _make_dead_handler(r, ro, cid):
                 async def _handler(dead_cid: str):
                     await self.disconnect(r, ro, dead_cid)
+
                 return _handler
 
             state.start(_make_dead_handler(room, role, client_id))
@@ -114,9 +115,7 @@ class RoomConnectionManager:
 
     async def send_to_room(self, room: str, role: str, message: dict) -> None:
         async with self.lock:
-            clients_snapshot = dict(
-                self.rooms.get(room, {}).get(role, {})
-            )
+            clients_snapshot = dict(self.rooms.get(room, {}).get(role, {}))
 
         if not clients_snapshot:
             return

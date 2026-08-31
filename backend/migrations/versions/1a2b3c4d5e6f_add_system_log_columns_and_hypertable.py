@@ -128,9 +128,7 @@ def downgrade() -> None:
 
     if dialect == "postgresql":
         try:
-            op.execute(
-                "SELECT remove_compression_policy('logs', if_exists => TRUE);"
-            )
+            op.execute("SELECT remove_compression_policy('logs', if_exists => TRUE);")
         except Exception:
             pass
         op.execute("ALTER TABLE logs SET (timescaledb.compress = false)")
