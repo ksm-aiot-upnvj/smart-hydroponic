@@ -40,11 +40,13 @@ def build_actuator_control_payload(
         )
 
     automation_status = bool(snapshot.get("automation_status", False))
-    pump_status = bool(snapshot.get("pump_status", False))
-    light_status = bool(snapshot.get("light_status", False))
+    current_pump = bool(snapshot.get("pump_status", False))
+    current_light = bool(snapshot.get("light_status", False))
+
+    pump_status = current_pump
+    light_status = current_light
 
     if automation_status:
-        # Hysteresis for Pump (moisture)
         if moisture_avg is not None:
             if active_profile:
                 if moisture_avg < active_profile.moisture_min:
@@ -54,11 +56,9 @@ def build_actuator_control_payload(
             else:
                 if moisture_avg < MOISTURE_THRESHOLD:
                     pump_status = True
-                # If no profile, we can't easily do hysteresis. We'll just turn off if > threshold + some buffer, or just turn off if >= threshold.
                 elif moisture_avg >= MOISTURE_THRESHOLD:
                     pump_status = False
 
-        # Hysteresis for Light (temperature)
         if temperature_avg is not None:
             if active_profile:
                 if temperature_avg < active_profile.temperature_min:
@@ -71,10 +71,25 @@ def build_actuator_control_payload(
                 elif temperature_avg >= TEMPERATURE_THRESHOLD:
                     light_status = False
 
+    pump_changed = pump_status != current_pump
+    light_changed = light_status != current_light
+    change_detected = pump_changed or light_changed
+
+    changes: list[str] = []
+    if pump_changed:
+        changes.append(f"pump={'ON' if pump_status else 'OFF'}")
+    if light_changed:
+        changes.append(f"light={'ON' if light_status else 'OFF'}")
+    change_summary = ", ".join(changes) if changes else ""
+
     return {
         "moisture_avg": moisture_avg,
         "temperature_avg": temperature_avg,
         "pump_status": pump_status,
         "light_status": light_status,
         "automation_status": automation_status,
+        "change_detected": change_detected,
+        "pump_changed": pump_changed,
+        "light_changed": light_changed,
+        "change_summary": change_summary,
     }
