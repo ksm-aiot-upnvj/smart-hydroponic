@@ -13,6 +13,7 @@ from schemas.nutrition import (
     PlantNutritionProfileUpdate,
 )
 from schemas.user import UserBase, UserCreate, UserOut, UserRole
+from schemas.log import LogBase, LogCreate, LogOut, LogFilter
 from schemas.responses import (
     MessageResponse,
     responses_400,
@@ -37,6 +38,10 @@ __all__ = [
     "UserCreate",
     "UserOut",
     "UserRole",
+    "LogBase",
+    "LogCreate",
+    "LogOut",
+    "LogFilter",
     "MessageResponse",
     "responses_400",
     "responses_401",

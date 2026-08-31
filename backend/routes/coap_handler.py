@@ -19,6 +19,30 @@ COAP_CONFIG = {
 }
 
 
+async def _coap_write_log(
+    *,
+    event_type: str,
+    severity: str,
+    description: str,
+    client_ip: str,
+) -> None:
+    try:
+        from services.log_service import LogService
+        from utils.deps import get_db_session
+
+        async with get_db_session() as session:
+            svc = LogService(session)
+            await svc.write_log(
+                event_type=event_type,
+                severity=severity,
+                description=f"[{client_ip}] {description}",
+            )
+    except Exception:
+        logger.exception(
+            "[CoAP][%s] Failed to write log entry: %s", client_ip, description
+        )
+
+
 class HydroponicCoAPResource(resource.ObservableResource):
     _instances = {}
 
@@ -66,6 +90,14 @@ class HydroponicCoAPResource(resource.ObservableResource):
                     self.role,
                     exc,
                 )
+                await _coap_write_log(
+                    event_type="system",
+                    severity="warning",
+                    description=(
+                        f"Non-UTF-8 payload on {self.role}: {exc!r}"
+                    ),
+                    client_ip=client_ip,
+                )
                 return aiocoap.Message(
                     code=aiocoap.BAD_REQUEST, payload=b"Invalid payload encoding"
                 )
@@ -78,6 +110,12 @@ class HydroponicCoAPResource(resource.ObservableResource):
                     client_ip,
                     self.role,
                     exc,
+                )
+                await _coap_write_log(
+                    event_type="system",
+                    severity="warning",
+                    description=f"Invalid JSON on {self.role}: {exc!r}",
+                    client_ip=client_ip,
                 )
                 return aiocoap.Message(
                     code=aiocoap.BAD_REQUEST, payload=b"Invalid JSON"
@@ -103,6 +141,15 @@ class HydroponicCoAPResource(resource.ObservableResource):
                     exc,
                     data_json,
                 )
+                await _coap_write_log(
+                    event_type="sensor_anomaly",
+                    severity="warning",
+                    description=(
+                        f"Schema validation failed on {self.role}: "
+                        f"{exc!r}. Keys received: {list(data_json.keys())!r}"
+                    ),
+                    client_ip=client_ip,
+                )
                 err_body = json.dumps(
                     {"status": "error", "detail": "Validation failed"}
                 ).encode("utf-8")
@@ -117,6 +164,15 @@ class HydroponicCoAPResource(resource.ObservableResource):
             )
 
             if not buffered:
+                await _coap_write_log(
+                    event_type="system",
+                    severity="warning",
+                    description=(
+                        f"Packet dropped on {self.role}: "
+                        "rate-limited or ring buffer full"
+                    ),
+                    client_ip=client_ip,
+                )
                 rate_limited_body = json.dumps(
                     {"status": "dropped", "reason": "rate_limited_or_ring_full"}
                 ).encode("utf-8")
@@ -133,12 +189,27 @@ class HydroponicCoAPResource(resource.ObservableResource):
             ).encode("utf-8")
             return aiocoap.Message(code=aiocoap.CHANGED, payload=ack_payload)
 
-        except Exception:
+        except Exception as exc:
             logger.exception(
                 "[CoAP][ERROR] Unhandled error in render_put for role='%s' (%s)",
                 self.role,
                 client_ip,
             )
+            try:
+                await _coap_write_log(
+                    event_type="system",
+                    severity="critical",
+                    description=(
+                        f"Unhandled CoAP PUT error on {self.role}: {exc!r}"
+                    ),
+                    client_ip=client_ip,
+                )
+            except Exception:
+                logger.exception(
+                    "[CoAP][%s][%s] Failed to write critical log for render_put.",
+                    client_ip,
+                    self.role,
+                )
             return aiocoap.Message(
                 code=aiocoap.INTERNAL_SERVER_ERROR,
                 payload=b"Internal server error",

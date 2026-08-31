@@ -168,6 +168,7 @@ async def control_hydroponic_actuators(
     command: HydroponicDataActuator,
     transport: str = "websocket",
     current_user: UserOut = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
 ) -> HydroponicControlResult:
     require_role(current_user, {"admin", "superadmin"})
     if transport not in {"websocket", "coap"}:
@@ -178,6 +179,24 @@ async def control_hydroponic_actuators(
 
     command_id = f"dashboard-{uuid4()}"
     command_payload = command.model_dump()
+
+    from services.log_service import LogService
+
+    log_service = LogService(session)
+    try:
+        await log_service.write_log(
+            event_type="actuator",
+            severity="info",
+            description=(
+                f"Manual control via {transport}: "
+                f"pump={'ON' if command_payload.get('pump_status') else 'OFF'}, "
+                f"light={'ON' if command_payload.get('light_status') else 'OFF'}, "
+                f"automation={'ON' if command_payload.get('automation_status') else 'OFF'}"
+            ),
+            userid=current_user.userid,
+        )
+    except Exception:
+        logger.exception("Failed to write actuator control log.")
 
     if transport == "coap":
         import json
@@ -352,6 +371,24 @@ async def hydroponic_data_websocket(device_type: str, websocket: WebSocket):
         logger.exception(
             "[WebSocket] Unhandled error for client %s (role=%s)", session_id, role
         )
+        try:
+            from services.log_service import LogService
+            from utils.deps import get_db_session
+
+            async with get_db_session() as log_session:
+                log_service = LogService(log_session)
+                await log_service.write_log(
+                    event_type="system",
+                    severity="error",
+                    description=(
+                        f"WebSocket error for client {session_id} "
+                        f"(role={role}, physical={physical_id})"
+                    ),
+                )
+        except Exception:
+            logger.exception(
+                "[WebSocket] Failed to write error log for client %s", session_id
+            )
 
 
 @router.get("/test-sensor-data", response_class=HTMLResponse)
