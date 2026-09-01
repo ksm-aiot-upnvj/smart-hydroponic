@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Optional
 import enum
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import ForeignKey, Text, Enum as SQLEnum
+from sqlalchemy import ForeignKey, Text, Enum as SQLEnum, JSON
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 
@@ -18,6 +18,8 @@ class LogEventType(str, enum.Enum):
     AUTOMATION = "automation"
     SENSOR_ANOMALY = "sensor_anomaly"
     ACTUATOR = "actuator"
+    DEVICE = "device"
+    SECURITY = "security"
 
 
 class LogSeverity(str, enum.Enum):
@@ -60,5 +62,8 @@ class Log(Base):
         UUID(as_uuid=True), nullable=True, index=True
     )
     description: Mapped[str] = mapped_column(Text)
+    source_ip: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    device_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     user: Mapped[Optional["User"]] = relationship("User", back_populates="logs")

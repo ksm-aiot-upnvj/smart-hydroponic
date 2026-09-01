@@ -11,7 +11,7 @@ services:
       POSTGRES_USER: ${PGUSER}
       POSTGRES_PASSWORD: ${PGPASSWORD}
     ports:
-      - "5433:5432"
+      - "5433:5433"
     volumes:
       - timescale_data:/var/lib/postgresql/data
     healthcheck:
@@ -29,7 +29,7 @@ services:
       - .env
     environment:
       PGHOST: db
-      PGPORT: 5432
+      PGPORT: ${PGPORT}
       PGUSER: ${PGUSER}
       PGPASSWORD: ${PGPASSWORD}
       PGDATABASE: ${PGDATABASE}
