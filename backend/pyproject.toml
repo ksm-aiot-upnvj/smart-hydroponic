@@ -70,3 +70,8 @@ exclude_commit_patterns = [
     '''build\((?!deps\): .+)''',
     '''Initial [Cc]ommit.*''',
 ]
+
+[tool.pytest.ini_options]
+markers = [
+    "real_lifespan: run the test against the app's real startup lifespan (CoAP server + background tasks) instead of the neutralised one in conftest.py",
+]
