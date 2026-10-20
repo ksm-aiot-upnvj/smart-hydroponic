@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v1.5.0 (2026-10-20)
+
+### Bug Fixes
+
+- Prevent data loss and stabilize real-time monitoring pipeline under load
+  ([`955838b`](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/955838bb14492d09a22aaaa57d2fd117e33bd74a))
+
+- Stabilize CoAP handler and aggregator with tests & logging
+  ([`9c65e34`](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/9c65e34d18d6da9f773e05c9f872ece7a6bd626f))
+
+- **infra**: Update database connection config and docker port mapping
+  ([`f0bdf65`](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/f0bdf65a12ac753a28c7b3581d82f220862cf5a7))
+
+### Features
+
+- Add structured system log feature with enums + REST endpoints + TimescaleDB hypertable
+  ([`bd897e4`](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/bd897e45de742f99dfb849c1a22e25e688974d2e))
+
+
 ## v1.4.1 (2026-08-12)
 
 ### Bug Fixes
