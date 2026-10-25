@@ -125,7 +125,7 @@ Jika berhasil login tanpa password, SSH key sudah aktif.
 Setelah berhasil masuk ke server, clone repository:
 
 ```bash
-git clone https://github.com/IoT-Smart-Hydroponic/smart-hydroponic.git
+git clone https://github.com/ksm-aiot-upnvj/smart-hydroponic.git
 cd smart-hydroponic
 ```
 

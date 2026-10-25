@@ -4,7 +4,7 @@ site_description = "Dokumentasi berbasis web untuk mempelajari dan mengembangkan
 site_author = "Smart Hydroponic Research Group"
 site_url = "https://ksm-aiot-upnvj.github.io/smart-hydroponic/"
 repo_url = "https://github.com/ksm-aiot-upnvj/smart-hydroponic/"
-repo_name = "IoT-Smart-Hydroponic/smart-hydroponic"
+repo_name = "ksm-aiot-upnvj/smart-hydroponic"
 copyright = "Copyright &copy; 2026 Smart Hydroponic Research Group"
 
 nav = [
