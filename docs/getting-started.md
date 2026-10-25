@@ -41,7 +41,7 @@ Gunakan jalur ini jika Anda ingin menjalankan sistem dengan cara paling cepat.
 Jalankan dari folder tempat Anda biasa menyimpan proyek.
 
 ```bash
-git clone https://github.com/IoT-Smart-Hydroponic/smart-hydroponic.git
+git clone https://github.com/ksm-aiot-upnvj/smart-hydroponic.git
 ```
 
 ### Langkah 2. Masuk ke folder proyek
@@ -71,15 +71,25 @@ Buka file `.env`, lalu isi nilai yang dibutuhkan.
 Contoh lokal:
 
 ```env
-PGHOST=localhost
+# Port host untuk database bawaan (di dalam container tetap 5432).
+POSTGRES_HOST_PORT=5433
+POSTGRES_INTERNAL_PORT=5432
 PGUSER=nama_user_lokal
 PGDATABASE=nama_database_lokal
-PGPORT=5433
 PGPASSWORD=password_lokal_anda
-DATABASE_URL=postgresql+asyncpg://nama_user_lokal:password_lokal_anda@db:5432/nama_database_lokal
-JWT_SECRET=ganti_dengan_teks_rahasia_yang_panjang
+# Biarkan kosong. docker-compose membangun DATABASE_URL dari nilai PG* di atas,
+# sehingga file `.env` yang sama tetap aman dipakai dari host maupun container.
+DATABASE_URL=
+JWT_PRIVATE_KEY=keys/private.pem
+JWT_PUBLIC_KEY=keys/public.pem
 JWT_EXPIRES_IN=waktu_hidup_token
 ```
+
+!!! info
+
+    Versi sebelumnya memakai `JWT_SECRET`. Backend sekarang memakai pasangan
+    `JWT_PRIVATE_KEY` dan `JWT_PUBLIC_KEY` (algoritma ES256), jadi `JWT_SECRET`
+    tidak lagi dibaca.
 
 !!! warning
 
@@ -148,7 +158,7 @@ flowchart LR
 ### Langkah 1. Clone repository
 
 ```bash
-git clone https://github.com/IoT-Smart-Hydroponic/smart-hydroponic.git
+git clone https://github.com/ksm-aiot-upnvj/smart-hydroponic.git
 ```
 
 ### Langkah 2. Masuk ke folder proyek
@@ -209,7 +219,8 @@ PGDATABASE=smart_hydroponic
 PGPORT=5432
 PGPASSWORD=password_lokal_anda
 DATABASE_URL=postgresql+asyncpg://postgres:password_lokal_anda@localhost:5432/smart_hydroponic
-JWT_SECRET=ganti_dengan_teks_rahasia_yang_panjang
+JWT_PRIVATE_KEY=keys/private.pem
+JWT_PUBLIC_KEY=keys/public.pem
 JWT_EXPIRES_IN=waktu_hidup_token
 ```
 
