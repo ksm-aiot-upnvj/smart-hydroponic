@@ -11,6 +11,7 @@ from routes.user_routes import router as user_router
 from routes.hydroponic_routes import router as hydroponic_router
 from routes.nutrition_routes import router as nutrition_router
 from routes.log_routes import router as log_router
+from config.config import settings
 
 
 import aiocoap
@@ -128,10 +129,14 @@ app = FastAPI(
 
 templates = Jinja2Templates(directory="templates")
 
+cors_origins = settings.cors_allow_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    # Browsers reject "Access-Control-Allow-Origin: *" together with
+    # credentials, so credentials are only enabled for an explicit origin list.
+    allow_credentials="*" not in cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

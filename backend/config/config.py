@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from typing import Self
 
 
@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     DATABASE_PASSWORD: str = Field(validation_alias="PGPASSWORD", default="")
     DATABASE_NAME: str = Field(validation_alias="PGDATABASE", default="")
     DATABASE_URL: str | None = None
+    # Comma-separated list of allowed browser origins, or "*".
+    CORS_ALLOW_ORIGINS: str = "*"
     ALGORITHM: str = "ES256"
     ACCESS_TOKEN_EXPIRE: str = Field(validation_alias="JWT_EXPIRES_IN")
     JWT_PRIVATE_KEY: str = Field(validation_alias="JWT_PRIVATE_KEY")
@@ -25,6 +27,28 @@ class Settings(BaseSettings):
     SUPERUSER_EMAIL: str = Field(validation_alias="SUPERUSER_EMAIL")
     SUPERUSER_PASSWORD: str = Field(validation_alias="SUPERUSER_PASSWORD")
     SUPERUSER_ROLE: str = Field(validation_alias="SUPERUSER_ROLE")
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def _blank_database_url_is_none(cls, value: object) -> object:
+        """Treat an empty/whitespace DATABASE_URL as unset.
+
+        The containers are given `DATABASE_URL: ""` so the URL is rebuilt from
+        PGHOST/PGPORT/... and a host-oriented value in `.env` (for example
+        `localhost:5433`) can never leak into a container network.
+        """
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @property
+    def cors_allow_origins(self) -> list[str]:
+        """`CORS_ALLOW_ORIGINS` split into a list, ignoring empty entries."""
+        return [
+            origin.strip()
+            for origin in self.CORS_ALLOW_ORIGINS.split(",")
+            if origin.strip()
+        ]
 
     @model_validator(mode="after")
     def _build_database_url(self) -> Self:
