@@ -1,5 +1,10 @@
-# docker-compose.yml
-# Must edit! Adjust environment as needed.
+# Local development stack (bundled database + api + client on one network).
+#
+# This file bundles its own `db` service, so `PGHOST: db` and
+# `depends_on: db` are valid here — everything shares `hydroponic_network`.
+# The production stack does NOT: see docker-compose.prod.yml.
+#
+# Copy .env.example to .env first (`docker compose --env-file .env ...`).
 services:
   db:
     image: timescale/timescaledb:2.24.0-pg18
@@ -11,7 +16,9 @@ services:
       POSTGRES_USER: ${PGUSER}
       POSTGRES_PASSWORD: ${PGPASSWORD}
     ports:
-      - "5433:5432"
+      # Host port (POSTGRES_HOST_PORT) -> container port (POSTGRES_INTERNAL_PORT).
+      # Never map "${POSTGRES_HOST_PORT}:${POSTGRES_HOST_PORT}".
+      - "${POSTGRES_HOST_PORT:-5433}:${POSTGRES_INTERNAL_PORT:-5432}"
     volumes:
       - timescale_data:/var/lib/postgresql/data
     healthcheck:
@@ -28,11 +35,15 @@ services:
     env_file:
       - .env
     environment:
+      # In-network database coordinates override whatever `.env` holds for the
+      # host, and DATABASE_URL is blanked so Settings rebuilds it from these
+      # values instead of reusing a host-oriented URL such as localhost:5433.
       PGHOST: db
-      PGPORT: ${PGPORT}
+      PGPORT: ${POSTGRES_INTERNAL_PORT:-5432}
       PGUSER: ${PGUSER}
       PGPASSWORD: ${PGPASSWORD}
       PGDATABASE: ${PGDATABASE}
+      DATABASE_URL: ""
       COAP_HOST: "0.0.0.0"
     ports:
       - "8000:8000"

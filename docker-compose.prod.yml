@@ -1,47 +1,53 @@
-# docker-compose.yml
-# Must edit! Adjust environment as needed.
+# Production stack: api + client only.
+#
+# PostgreSQL is NOT part of this project in production. It is deployed as its
+# own stack (`database-service-ksm-aiot`, host port 5434 -> container 5432) and
+# both stacks join the pre-existing external Docker network `ksm-aiot-network`.
+#
+# Consequences of the database living in another Compose project:
+#   * this file must not declare a `db` service, and
+#   * `depends_on` cannot express a cross-project dependency. The api container
+#     waits for the database itself (backend/entrypoint.sh) and surfaces
+#     readiness through its Dockerfile HEALTHCHECK.
+#
+# Deploy:
+#   docker network create ksm-aiot-network      # once, only if it does not exist
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d
+#   docker compose -f docker-compose.prod.yml ps
+#
+# Never run `docker compose down -v` for this file: the named volumes holding
+# database data belong to the other project and must survive routine redeploys.
 services:
-  db:
-    image: timescale/timescaledb:2.24.0-pg18
-    container_name: timescaledb
-    env_file:
-      - .env
-    environment:
-      POSTGRES_DB: ${PGDATABASE}
-      POSTGRES_USER: ${PGUSER}
-      POSTGRES_PASSWORD: ${PGPASSWORD}
-    ports:
-      - "5433:5432"
-    volumes:
-      - timescale_data:/var/lib/postgresql/data
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${PGUSER} -d ${PGDATABASE} -h localhost" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - hydroponic_network
-
   api:
     image: ksmaiotupnvj/smart-hydroponic-backend:latest
     container_name: hydroponic-backend
     env_file:
       - .env
     environment:
-      PGHOST: db
-      PGPORT: 5432
+      # PROD_PGHOST is the database's DNS name on ksm-aiot-network. Confirm it
+      # with `docker network inspect ksm-aiot-network` before the first deploy.
+      PGHOST: ${PROD_PGHOST:-database-service-ksm-aiot}
+      PGPORT: ${POSTGRES_INTERNAL_PORT:-5432}
       PGUSER: ${PGUSER}
       PGPASSWORD: ${PGPASSWORD}
       PGDATABASE: ${PGDATABASE}
+      # Blanked so Settings rebuilds the URL from the values above instead of
+      # reusing a host-oriented URL (e.g. localhost:5434) from .env.
+      DATABASE_URL: ""
       COAP_HOST: "0.0.0.0"
+    # Bound to loopback on purpose: the host NGINX (site `iot-hidroponik`)
+    # terminates TLS and proxies /smart-hydroponic/api/v2/ to 127.0.0.1:8000.
+    # Publishing on 0.0.0.0 would expose the API and CoAP port directly.
     ports:
-      - "8000:8000"
-      - "8683:8683/udp"
-    depends_on:
-      db:
-        condition: service_healthy
+      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8683:8683/udp"
+    volumes:
+      # Required: backend/utils/crypto.py reads these files at import time and
+      # raises RuntimeError if they are missing, and `.env` points at the
+      # relative path `keys/private.pem` (WORKDIR is /app).
+      - ./keys:/app/keys:ro
     networks:
-      - hydroponic_network
+      - ksm-aiot-network
 
   client:
     image: ksmaiotupnvj/smart-hydroponic-frontend:latest
@@ -51,12 +57,9 @@ services:
     depends_on:
       - api
     networks:
-      - hydroponic_network
-
-volumes:
-  timescale_data:
+      - ksm-aiot-network
 
 networks:
-  hydroponic_network:
-    name: hydroponic_network
-    driver: bridge
+  ksm-aiot-network:
+    name: ksm-aiot-network
+    external: true
