@@ -191,3 +191,21 @@ id_ed25519.*
 *.pfx
 *.pkcs12
 *.asc
+
+# Local environment overrides (`.env` itself is ignored above)
+.env.local
+.env.*.local
+
+# Per-project environment files (see monitoring/.env.example)
+monitoring/.env
+
+# Generated deployment secrets mounted into the api container
+/keys/
+certs/
+
+# Database dumps and backups — never commit real data.
+# Legitimate schema/migration files are *.py (Alembic) and stay tracked.
+*.dump
+*.dump.gz
+*.sql.gz
+backups/
