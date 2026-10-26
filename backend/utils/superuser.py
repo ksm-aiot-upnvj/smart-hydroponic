@@ -1,16 +1,15 @@
-from config.db import Session
-from config.config import settings
 import asyncio
-from sqlalchemy import text
-from models.user import User
-from schemas.user import UserRole
-import bcrypt
 import logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s:     %(message)s",
-)
+import bcrypt
+from sqlalchemy import text
+
+from config.config import settings
+from config.db import Session
+from models.user import User
+from schemas.user import UserRole
+
+
 logger = logging.getLogger(__name__)
 
 
