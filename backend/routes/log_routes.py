@@ -80,9 +80,6 @@ async def delete_log(
 ):
     require_role(current_user, {"superadmin"})
     service = LogService(session)
-    existing = await service.get_log_by_id(logid)
-    if not existing:
-        raise HTTPException(status_code=404, detail="Log entry not found")
 
     deleted = await service.delete_log(logid)
     if not deleted:
@@ -95,4 +92,4 @@ async def delete_log(
         userid=current_user.userid,
     )
 
-    return MessageResponse(message=f"Log {logid} has been deleted")
+    return MessageResponse(detail=f"Log {logid} has been deleted")
