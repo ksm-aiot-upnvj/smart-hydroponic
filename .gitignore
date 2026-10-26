@@ -175,6 +175,17 @@ pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/python
 
+# --- Secrets: environment files ---------------------------------------------
+# `.env` matches at any depth (so backend/.env, monitoring/.env and
+# frontend-vue/.env are all covered) together with every variant such as
+# `.env.local`, `.env.production` or `.env.staging`. Templates are re-included
+# afterwards so `.env.example` files remain tracked.
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# --- Secrets: private keys and certificates ---------------------------------
 # SSH and generic private/public keys
 id_rsa
 id_rsa.*
@@ -189,23 +200,40 @@ id_ed25519.*
 *.key
 *.pem
 *.pfx
+*.p12
 *.pkcs12
+*.jks
+*.keystore
 *.asc
 
-# Local environment overrides (`.env` itself is ignored above)
-.env.local
-.env.*.local
+# Throwaway key pair used by the backend tests: deliberately committed, so it
+# must not be swallowed by the `*.pem` rule above.
+!**/test/dummy_*.pem
 
-# Per-project environment files (see monitoring/.env.example)
-monitoring/.env
-
-# Generated deployment secrets mounted into the api container
-/keys/
+# Generated deployment secrets (mounted into the api container). Matched at any
+# depth so backend/keys/ or a nested certs/ directory cannot slip through.
+keys/
 certs/
+secrets/
 
-# Database dumps and backups — never commit real data.
+# --- Runtime artifacts ------------------------------------------------------
+node_modules/
+.vite/
+coverage/
+.nyc_output/
+
+# --- OS / editor junk -------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+
+# --- Database dumps and backups — never commit real data --------------------
 # Legitimate schema/migration files are *.py (Alembic) and stay tracked.
 *.dump
 *.dump.gz
 *.sql.gz
+*.sqlite3
 backups/
