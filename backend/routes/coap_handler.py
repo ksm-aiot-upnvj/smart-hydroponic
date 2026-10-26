@@ -44,6 +44,11 @@ async def _coap_write_log(
 
 
 class HydroponicCoAPResource(resource.ObservableResource):
+    # Process-wide registry so the pipeline and the HTTP routes can reach the
+    # live actuator resource. Known limitation: it is shared across instances
+    # (and across tests), so an entry created by one instance survives until a
+    # new instance for the same role overwrites it. Replacing it with explicit
+    # dependency injection would touch main.py and pipeline.py — deferred.
     _instances = {}
 
     def __init__(
