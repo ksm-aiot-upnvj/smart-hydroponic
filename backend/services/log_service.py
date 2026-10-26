@@ -58,9 +58,7 @@ class LogService:
         )
         return await self.add_log(entry)
 
-    async def _apply_filters(
-        self, filters: LogFilter
-    ) -> tuple[list[str], dict[str, Any]]:
+    def _apply_filters(self, filters: LogFilter) -> tuple[list[str], dict[str, Any]]:
         conditions: list[str] = []
         params: dict[str, Any] = {}
 
@@ -84,7 +82,7 @@ class LogService:
 
     async def get_logs(self, filters: LogFilter) -> ResponseList[LogOut]:
         offset = (filters.page - 1) * filters.limit
-        conditions, params = await self._apply_filters(filters)
+        conditions, params = self._apply_filters(filters)
         params["limit"] = filters.limit
         params["offset"] = offset
 
