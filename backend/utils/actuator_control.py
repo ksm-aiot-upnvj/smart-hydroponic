@@ -1,7 +1,7 @@
 import os
 from typing import Any
 
-from models.nutrition import PlantNutritionProfile
+from schemas.nutrition import PlantNutritionProfileOut
 
 MOISTURE_THRESHOLD = float(os.getenv("HYDROPONIC_MOISTURE_THRESHOLD", "60"))
 TEMPERATURE_THRESHOLD = float(os.getenv("HYDROPONIC_TEMPERATURE_THRESHOLD", "30.0"))
@@ -15,7 +15,7 @@ def _average(values: list[Any]) -> float | None:
 
 
 def build_actuator_control_payload(
-    snapshot: dict[str, Any], active_profile: PlantNutritionProfile | None = None
+    snapshot: dict[str, Any], active_profile: PlantNutritionProfileOut | None = None
 ) -> dict[str, Any]:
     moisture_avg = snapshot.get("moisture_avg")
     if moisture_avg is None:
