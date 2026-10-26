@@ -136,11 +136,10 @@ class HydroponicOut(HydroponicAggregate):
     @property
     def timestamp(self) -> datetime.datetime:
         timestamp_int = UUID(str(self.dataid)).time
-        date = datetime.datetime.fromtimestamp(
+        return datetime.datetime.fromtimestamp(
             timestamp_int / 1_000,
-            tz=datetime.datetime.now(datetime.timezone.utc).tzinfo,
+            tz=datetime.timezone.utc,
         )
-        return date
 
     model_config = ConfigDict(from_attributes=True)
 
