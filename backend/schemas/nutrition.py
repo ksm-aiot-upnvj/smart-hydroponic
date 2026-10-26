@@ -1,6 +1,6 @@
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from uuid import UUID, uuid4
+from uuid import UUID
 
 
 class PlantNutritionProfileBase(BaseModel):
@@ -54,7 +54,8 @@ class PlantNutritionProfileUpdate(BaseModel):
 
 
 class PlantNutritionProfileOut(PlantNutritionProfileBase):
-    nutrition_id: UUID = Field(default_factory=uuid4)
+    nutrition_id: UUID
+
     is_active: bool = False
     created_at: datetime
     updated_at: datetime
