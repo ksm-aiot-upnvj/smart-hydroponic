@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str | None = None
     # Comma-separated list of allowed browser origins, or "*".
     CORS_ALLOW_ORIGINS: str = "*"
+    # Interface the CoAP server binds to. Loopback by default; containers set
+    # COAP_HOST=0.0.0.0 so the ESP nodes can reach it.
+    COAP_HOST: str = "127.0.0.1"
     ALGORITHM: str = "ES256"
     ACCESS_TOKEN_EXPIRE: str = Field(validation_alias="JWT_EXPIRES_IN")
     JWT_PRIVATE_KEY: str = Field(validation_alias="JWT_PRIVATE_KEY")

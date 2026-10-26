@@ -15,13 +15,14 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from main import app
+from config.config import settings
 
 
 @pytest.mark.real_lifespan
 def test_real_lifespan_starts_and_serves_health(monkeypatch: pytest.MonkeyPatch):
     # The dev .env sets COAP_HOST=0.0.0.0 (correct for Docker), which aiocoap
     # refuses to bind to. Pin it to loopback so the test is deterministic.
-    monkeypatch.setenv("COAP_HOST", "127.0.0.1")
+    monkeypatch.setattr(settings, "COAP_HOST", "127.0.0.1")
 
     with TestClient(app) as client:
         # Real lifespan only: app.state.snapshot_pipeline is set during startup.
