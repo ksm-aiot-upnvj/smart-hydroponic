@@ -149,9 +149,10 @@ class UserService:
             update_data["password"] = hashed
             update_data["token_version"] = int(user.get("token_version", 0)) + 1
 
-        for key, value in update_data.items():
-            if hasattr(value, "value"):
-                update_data[key] = value.value
+        update_data = {
+            key: value.value if hasattr(value, "value") else value
+            for key, value in update_data.items()
+        }
 
         set_clause = ", ".join(f"{key} = :{key}" for key in update_data.keys())
         stmt = text(
