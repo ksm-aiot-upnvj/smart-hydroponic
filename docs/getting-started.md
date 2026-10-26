@@ -91,6 +91,14 @@ JWT_EXPIRES_IN=waktu_hidup_token
     `JWT_PRIVATE_KEY` dan `JWT_PUBLIC_KEY` (algoritma ES256), jadi `JWT_SECRET`
     tidak lagi dibaca.
 
+!!! info
+
+    Path kunci dibaca relatif terhadap folder tempat backend dijalankan. Jika
+    backend dijalankan dari folder `backend`, file kunci harus berada di
+    `backend/keys/private.pem` dan `backend/keys/public.pem`. Backend tetap bisa
+    start walaupun file kunci belum ada; errornya baru muncul saat token JWT
+    dibuat atau diverifikasi.
+
 !!! warning
 
     File `.env` berisi informasi sensitif seperti password database dan secret key untuk JWT. Jangan bagikan file ini ke orang lain atau commit ke repository.

@@ -68,6 +68,20 @@ Jalankan dari folder `backend`.
    http://localhost:8000/health
    ```
 
+## Menjalankan Test
+
+Test backend berada di folder `test/`. Jalankan dari folder `backend`.
+
+```bash
+uv run pytest -q
+```
+
+Beberapa hal yang perlu diketahui:
+
+- Konfigurasi pytest berada di `backend/pyproject.toml`. File `pytest.ini` di root repository memakai daftar marker yang sama agar perintah `pytest` dari root repository juga mengenali marker khusus seperti `real_lifespan`.
+- Sebagian file di `test/` adalah simulasi perangkat (misalnya `test_esp32.py`), bukan test otomatis, sehingga tidak menambah jumlah test yang dijalankan.
+- Hasil yang diharapkan: seluruh test lulus tanpa warning.
+
 ## Cara Mengecek Berhasil
 
 Backend berjalan dengan benar jika:
