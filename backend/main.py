@@ -19,7 +19,7 @@ import aiocoap.resource as resource
 from contextlib import asynccontextmanager
 from routes.coap_handler import HydroponicCoAPResource
 from utils.aggregator import aggregator
-from utils.pipeline import SnapshotPipeline
+from utils.pipeline import SnapshotPipeline, _NUM_WORKERS
 import logging
 import colorlog
 
@@ -89,16 +89,13 @@ async def lifespan(app: FastAPI):
         ),
     )
 
-    import os
-
-    coap_host = os.getenv("COAP_HOST", "127.0.0.1")
     coap_context = await aiocoap.Context.create_server_context(
-        root, bind=(coap_host, 8683)
+        root, bind=(settings.COAP_HOST, 8683)
     )
 
     logger.info(
         "Pipeline ready: aggregator drain-loop + %d snapshot workers running.",
-        2,
+        _NUM_WORKERS,
     )
 
     yield
