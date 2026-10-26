@@ -9,8 +9,6 @@ dotenv.load_dotenv()
 DEVICE_ID = "esp32-environment-device"
 uri = "ws://localhost:8000/smart-hydroponic/api/v2/hydroponics/ws/environment-data"
 
-asyncio.set_event_loop(asyncio.new_event_loop())
-
 
 def data_environment():
     return {
@@ -65,4 +63,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.get_event_loop().run_until_complete(main())
+    asyncio.run(main())
