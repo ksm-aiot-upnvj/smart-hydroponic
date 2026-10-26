@@ -34,11 +34,10 @@ class LogOut(LogBase):
     @property
     def timestamp(self) -> datetime.datetime:
         timestamp_int = UUID(str(self.logid)).time
-        date = datetime.datetime.fromtimestamp(
+        return datetime.datetime.fromtimestamp(
             timestamp_int / 1_000,
-            tz=datetime.datetime.now(datetime.timezone.utc).tzinfo,
+            tz=datetime.timezone.utc,
         )
-        return date
 
 
 class LogFilter(BaseModel):
