@@ -195,7 +195,10 @@ belum diverifikasi.
 
 ### Tes lokal yang lulus
 
-- `pytest` (backend): 53 lulus, termasuk 8 tes baru untuk `Settings` dan CORS.
+- `pytest` (backend, `uv run pytest -q`): 53 lulus tanpa warning, termasuk 8 tes
+  baru untuk `Settings` dan CORS. Sama hasilnya baik dijalankan dari folder
+  `backend` (memakai `backend/pyproject.toml`) maupun dari root repository
+  (memakai `pytest.ini` root).
 - `ruff format --check .` dan `ruff check .`: bersih.
 
 ### Konfigurasi server yang teramati (read-only, tanpa perubahan)
