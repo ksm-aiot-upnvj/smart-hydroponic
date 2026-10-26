@@ -75,6 +75,6 @@ class HydroponicData(Base):
     )
 
     # Actuator Data
-    pump_status: Mapped[int] = mapped_column(Boolean, nullable=False)
-    light_status: Mapped[int] = mapped_column(Boolean, nullable=False)
-    automation_status: Mapped[int] = mapped_column(Boolean, nullable=False)
+    pump_status: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    light_status: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    automation_status: Mapped[bool] = mapped_column(Boolean, nullable=False)
