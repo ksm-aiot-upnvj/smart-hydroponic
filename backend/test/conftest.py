@@ -12,12 +12,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ.setdefault("PGHOST", "localhost")
 os.environ.setdefault("PGPORT", "5432")
 os.environ.setdefault("PGUSER", "test_user")
-import os
-
-# Provide default settings so imports that instantiate Settings() do not fail in tests.
-os.environ.setdefault("PGHOST", "localhost")
-os.environ.setdefault("PGPORT", "5432")
-os.environ.setdefault("PGUSER", "test_user")
 os.environ.setdefault("PGPASSWORD", "test_password")
 os.environ.setdefault("PGDATABASE", "test_db")
 os.environ.setdefault("JWT_EXPIRES_IN", "1h")
