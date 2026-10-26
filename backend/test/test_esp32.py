@@ -6,9 +6,6 @@ import json
 
 dotenv.load_dotenv()
 
-# Ensure a current event loop exists for asyncio
-asyncio.set_event_loop(asyncio.new_event_loop())
-
 DEVICE_ID = "esp32-plant-device"
 # uri = f"ws://{os.getenv('HOST')}/ws/smart-hydroponic/device"
 uri = "ws://localhost:8000/smart-hydroponic/api/v2/hydroponics/ws/sensor-data"
@@ -68,4 +65,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.get_event_loop().run_until_complete(main())
+    asyncio.run(main())
