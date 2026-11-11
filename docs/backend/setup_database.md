@@ -104,6 +104,8 @@ uv run alembic upgrade head
 
 Migration membuat struktur tabel sesuai kebutuhan aplikasi.
 
+> **Catatan `alembic.ini`:** nilai `sqlalchemy.url` di `backend/alembic.ini` sengaja dibiarkan sebagai placeholder (`driver://user:pass@localhost/dbname`) dan tidak boleh diisi kredensial asli. Saat menjalankan `alembic` dari folder `backend`, `migrations/env.py` akan menimpa nilai tersebut dengan `settings.DATABASE_URL` yang dibangun dari variabel `PG*` pada `.env` di root repository. Karena itu, jalankan `alembic` dari folder `backend` dengan file `.env` root sudah terisi; jangan mengandalkan URL di `alembic.ini`.
+
 ## Cara Mengecek Berhasil
 
 1. Backend dapat menjalankan endpoint `/db-test`.
