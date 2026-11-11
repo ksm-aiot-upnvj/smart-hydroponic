@@ -1143,8 +1143,6 @@ dependencies = [
     { name = "pydantic", extra = ["email"] },
     { name = "pydantic-settings" },
     { name = "pyjwt" },
-    { name = "pyserial" },
-    { name = "pyshark" },
     { name = "python-dotenv" },
     { name = "sqlalchemy" },
     { name = "websockets" },
@@ -1152,6 +1150,8 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "pyserial" },
+    { name = "pyshark" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "python-semantic-release" },
@@ -1172,8 +1172,6 @@ requires-dist = [
     { name = "pydantic", extras = ["email"], specifier = ">=2.12.5" },
     { name = "pydantic-settings", specifier = ">=2.12.0" },
     { name = "pyjwt", specifier = ">=2.10.1" },
-    { name = "pyserial", specifier = ">=3.5" },
-    { name = "pyshark", specifier = ">=0.6" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "sqlalchemy", specifier = ">=2.0.45" },
     { name = "websockets", specifier = ">=15.0.1" },
@@ -1181,6 +1179,8 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "pyserial", specifier = ">=3.5" },
+    { name = "pyshark", specifier = ">=0.6" },
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest-asyncio", specifier = ">=1.2.0" },
     { name = "python-semantic-release", specifier = ">=10.5.3" },

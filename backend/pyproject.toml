@@ -19,8 +19,6 @@ dependencies = [
     "aiocoap>=0.4.17",
     "pydantic[email]>=2.12.5",
     "alembic-postgresql-enum>=1.8.0",
-    "pyserial>=3.5",
-    "pyshark>=0.6",
     "colorlog>=6.11.0",
 ]
 
@@ -30,6 +28,8 @@ dev = [
     "ruff>=0.14.10",
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
+    "pyserial>=3.5",
+    "pyshark>=0.6",
 ]
 
 [tool.semantic_release]
