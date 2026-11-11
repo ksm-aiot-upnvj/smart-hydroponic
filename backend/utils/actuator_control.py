@@ -1,10 +1,7 @@
-import os
 from typing import Any
 
+from config.config import settings
 from schemas.nutrition import PlantNutritionProfileOut
-
-MOISTURE_THRESHOLD = float(os.getenv("HYDROPONIC_MOISTURE_THRESHOLD", "60"))
-TEMPERATURE_THRESHOLD = float(os.getenv("HYDROPONIC_TEMPERATURE_THRESHOLD", "30.0"))
 
 
 def _average(values: list[Any]) -> float | None:
@@ -54,9 +51,9 @@ def build_actuator_control_payload(
                 elif moisture_avg > active_profile.moisture_max:
                     pump_status = False
             else:
-                if moisture_avg < MOISTURE_THRESHOLD:
+                if moisture_avg < settings.HYDROPONIC_MOISTURE_THRESHOLD:
                     pump_status = True
-                elif moisture_avg >= MOISTURE_THRESHOLD:
+                elif moisture_avg >= settings.HYDROPONIC_MOISTURE_THRESHOLD:
                     pump_status = False
 
         if temperature_avg is not None:
@@ -66,9 +63,9 @@ def build_actuator_control_payload(
                 elif temperature_avg > active_profile.temperature_max:
                     light_status = False
             else:
-                if temperature_avg < TEMPERATURE_THRESHOLD:
+                if temperature_avg < settings.HYDROPONIC_TEMPERATURE_THRESHOLD:
                     light_status = True
-                elif temperature_avg >= TEMPERATURE_THRESHOLD:
+                elif temperature_avg >= settings.HYDROPONIC_TEMPERATURE_THRESHOLD:
                     light_status = False
 
     pump_changed = pump_status != current_pump

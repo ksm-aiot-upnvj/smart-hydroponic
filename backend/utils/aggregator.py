@@ -1,5 +1,4 @@
 import asyncio
-import os
 import time
 import logging
 from collections import deque
@@ -7,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid7
 
+from config.config import settings
 from schemas import HydroponicIn
 from utils.log_helpers import best_effort_log
 
@@ -15,9 +15,6 @@ logger = logging.getLogger(__name__)
 _PROFILE_CACHE_TTL = 30.0
 _RING_BUFFER_SIZE = 256
 _PROCESS_QUEUE_MAXSIZE = 4096
-
-_DEFAULT_MIN_INTERVAL = float(os.getenv("HYDROPONIC_MIN_INTERVAL_SECONDS", "0.1"))
-_DEFAULT_PAIR_TIMEOUT = float(os.getenv("HYDROPONIC_PAIR_TIMEOUT_SECONDS", "60.0"))
 
 
 @dataclass(order=True)
@@ -31,13 +28,21 @@ class PendingPacket:
 class HydroponicAggregator:
     def __init__(
         self,
-        timeout: float = _DEFAULT_PAIR_TIMEOUT,
-        min_interval: float = _DEFAULT_MIN_INTERVAL,
+        timeout: float | None = None,
+        min_interval: float | None = None,
         ring_size: int = _RING_BUFFER_SIZE,
         queue_maxsize: int = _PROCESS_QUEUE_MAXSIZE,
     ):
-        self.timeout: float = timeout
-        self.min_interval: float = min_interval
+        self.timeout: float = (
+            timeout
+            if timeout is not None
+            else settings.HYDROPONIC_PAIR_TIMEOUT_SECONDS
+        )
+        self.min_interval: float = (
+            min_interval
+            if min_interval is not None
+            else settings.HYDROPONIC_MIN_INTERVAL_SECONDS
+        )
 
         self._buffers: dict[str, deque[PendingPacket]] = {
             "plant": deque(maxlen=ring_size),

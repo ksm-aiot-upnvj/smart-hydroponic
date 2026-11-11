@@ -22,6 +22,19 @@ class Settings(BaseSettings):
     # Interface the CoAP server binds to. Loopback by default; containers set
     # COAP_HOST=0.0.0.0 so the ESP nodes can reach it.
     COAP_HOST: str = "127.0.0.1"
+    # Outbound CoAP client used to command the ESP8266 actuator. Keep the
+    # default on loopback so a missing configuration can never send commands
+    # to a production device by accident.
+    COAP_ACTUATOR_HOST: str = "127.0.0.1"
+    COAP_ACTUATOR_PORT: str = "5683"
+    COAP_ACTUATOR_CONTROL_PATH: str = "actuator/control"
+    COAP_ACTUATOR_TIMEOUT_SECONDS: float = 5.0
+    # Aggregator pairing/rate-limit tuning.
+    HYDROPONIC_MIN_INTERVAL_SECONDS: float = 0.1
+    HYDROPONIC_PAIR_TIMEOUT_SECONDS: float = 60.0
+    # Automation thresholds used when no nutrition profile is active.
+    HYDROPONIC_MOISTURE_THRESHOLD: float = 60.0
+    HYDROPONIC_TEMPERATURE_THRESHOLD: float = 30.0
     ALGORITHM: str = "ES256"
     ACCESS_TOKEN_EXPIRE: str = Field(validation_alias="JWT_EXPIRES_IN")
     JWT_PRIVATE_KEY: str = Field(validation_alias="JWT_PRIVATE_KEY")

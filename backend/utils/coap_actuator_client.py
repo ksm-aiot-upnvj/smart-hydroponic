@@ -1,10 +1,11 @@
 import asyncio
 import json
-import os
 from typing import Any
 
 import aiocoap
 import logging
+
+from config.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -12,19 +13,19 @@ logger = logging.getLogger(__name__)
 def get_actuator_control_uri() -> str:
     """Build the ESP8266 actuator CoAP endpoint URI.
 
-    The defaults match the evaluation firmware in
-    `backend/eval/esp/coap/esp8266/esp8266.ino`. Override them with environment
-    variables when the actuator uses a different IP, port, or path.
+    The target is taken from the centralized ``Settings`` object
+    (``COAP_ACTUATOR_HOST`` / ``COAP_ACTUATOR_PORT`` /
+    ``COAP_ACTUATOR_CONTROL_PATH``) so there is a single source of truth.
     """
 
-    host = os.getenv("COAP_ACTUATOR_HOST", "172.25.21.236")
-    port = os.getenv("COAP_ACTUATOR_PORT", "5683")
-    path = os.getenv("COAP_ACTUATOR_CONTROL_PATH", "actuator/control")
+    host = settings.COAP_ACTUATOR_HOST
+    port = settings.COAP_ACTUATOR_PORT
+    path = settings.COAP_ACTUATOR_CONTROL_PATH
     return f"coap://{host}:{port}/{path}"
 
 
 def get_actuator_timeout_seconds() -> float:
-    return float(os.getenv("COAP_ACTUATOR_TIMEOUT_SECONDS", "5"))
+    return settings.COAP_ACTUATOR_TIMEOUT_SECONDS
 
 
 async def send_actuator_command_coap(
