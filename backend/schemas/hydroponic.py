@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, ConfigDict, computed_field
+from pydantic import BaseModel, Field, ConfigDict, AliasChoices, computed_field
 import datetime
 from typing import Optional
 from uuid import UUID, uuid7
@@ -48,7 +48,15 @@ class HydroponicDataPlant(BaseModel):
     moisture6: int = Field(0, ge=0)
     flowrate: float = Field(0.0, ge=0.0)
     total_litres: float = Field(0.0, ge=0.0)
-    distance_cm: float = Field(0.0, ge=0.0)
+    # The ESP32 plant firmware sends this reading under the key `water_level`,
+    # while the stored column/field name is `distance_cm`. Accept both keys so
+    # the sensor-to-water-surface distance is populated instead of silently
+    # defaulting to 0 (see audit finding AB-01).
+    distance_cm: float = Field(
+        0.0,
+        ge=0.0,
+        validation_alias=AliasChoices("distance_cm", "water_level"),
+    )
 
 
 class HydroponicDataEnvironment(BaseModel):
