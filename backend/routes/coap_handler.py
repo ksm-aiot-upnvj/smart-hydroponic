@@ -8,6 +8,7 @@ from schemas import (
     HydroponicDataActuator,
 )
 from utils.aggregator import HydroponicAggregator
+from utils.log_helpers import best_effort_log
 
 logger = logging.getLogger(__name__)
 
@@ -26,21 +27,13 @@ async def _coap_write_log(
     description: str,
     client_ip: str,
 ) -> None:
-    try:
-        from services.log_service import LogService
-        from utils.deps import get_db_session
-
-        async with get_db_session() as session:
-            svc = LogService(session)
-            await svc.write_log(
-                event_type=event_type,
-                severity=severity,
-                description=f"[{client_ip}] {description}",
-            )
-    except Exception:
-        logger.exception(
-            "[CoAP][%s] Failed to write log entry: %s", client_ip, description
-        )
+    """CoAP-specific log write: prefixes the caller IP, then delegates to the
+    shared best-effort helper (which never raises into the caller)."""
+    await best_effort_log(
+        event_type=event_type,
+        severity=severity,
+        description=f"[{client_ip}] {description}",
+    )
 
 
 class HydroponicCoAPResource(resource.ObservableResource):
