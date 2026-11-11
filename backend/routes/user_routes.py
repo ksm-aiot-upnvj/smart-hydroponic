@@ -24,7 +24,6 @@ from schemas.responses import (
     responses_404,
     responses_500,
 )
-import bcrypt
 import logging
 
 logger = logging.getLogger(__name__)
@@ -62,12 +61,8 @@ async def register_user(
         existing_user = await service.get_user_by_username(user.username)
         if existing_user:
             raise HTTPException(status_code=400, detail="Username already registered")
-        hashed_password = bcrypt.hashpw(
-            user.password.encode("utf-8"), bcrypt.gensalt()
-        ).decode("utf-8")
 
-        user_payload = user.model_copy(update={"password": hashed_password})
-        created_user = await service.add_user(user_payload.model_dump())
+        created_user = await service.add_user(user.model_dump())
         return UserOut.model_validate(created_user)
     except IntegrityError as e:
         logger.error("Integrity error: %s", e)
