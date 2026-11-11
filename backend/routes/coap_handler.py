@@ -64,11 +64,11 @@ class HydroponicCoAPResource(resource.ObservableResource):
         )
         if request.opt.observe == 0:
             logger.info(
-                f"[CoAP Debug] Node {client_ip} berhasil mendaftar Observe ke '{self.role}'"
+                f"[CoAP Debug] Node {client_ip} registered Observe on '{self.role}'"
             )
         else:
             logger.info(
-                f"[CoAP Debug] Node {client_ip} meminta GET (tanpa Observe) ke '{self.role}'"
+                f"[CoAP Debug] Node {client_ip} requested GET (without Observe) on '{self.role}'"
             )
         return aiocoap.Message(payload=self.latest_state)
 
@@ -118,7 +118,7 @@ class HydroponicCoAPResource(resource.ObservableResource):
                 )
 
             logger.info(
-                f"[CoAP Handler] Menerima payload dari node '{self.role}' ({client_ip}): {data_json}"
+                f"[CoAP Handler] Received payload from node '{self.role}' ({client_ip}): {data_json}"
             )
 
             if self.validator is None:
@@ -152,7 +152,7 @@ class HydroponicCoAPResource(resource.ObservableResource):
                 return aiocoap.Message(code=aiocoap.BAD_REQUEST, payload=err_body)
 
             logger.info(
-                f"[CoAP Handler] Data dari node '{self.role}' sedang divalidasi"
+                f"[CoAP Handler] Data from node '{self.role}' is being validated"
             )
 
             buffered = await self.aggregator.gather_data(self.role, data.model_dump())
