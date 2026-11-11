@@ -48,9 +48,9 @@ def get_project_version():
         pyproject_path = Path(__file__).parent / "pyproject.toml"
         with open(pyproject_path, "rb") as f:
             pyproject_data = tomllib.load(f)
-            return pyproject_data["project"].get("version", "2.0.0")
+            return pyproject_data["project"].get("version", "1.5.0")
     except Exception:
-        return "2.0.0"
+        return "1.5.0"
 
 
 @asynccontextmanager
