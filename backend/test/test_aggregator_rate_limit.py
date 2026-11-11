@@ -34,7 +34,7 @@ def _find_call(mock, **expected_kwargs):
 async def test_rate_limit_drops_fast_repeats():
     agg = HydroponicAggregator(min_interval=0.2, timeout=60.0)
 
-    with patch("utils.aggregator._best_effort_log", new_callable=AsyncMock) as mock_log:
+    with patch("utils.aggregator.best_effort_log", new_callable=AsyncMock) as mock_log:
         first = await agg.gather_data("plant", {"moisture1": 1})
         second = await agg.gather_data("plant", {"moisture1": 2})  # too soon
 
@@ -62,7 +62,7 @@ async def test_rate_limit_allows_after_interval():
 async def test_drop_log_throttling_suppresses_repeats():
     agg = HydroponicAggregator(min_interval=1.0, timeout=60.0)
 
-    with patch("utils.aggregator._best_effort_log", new_callable=AsyncMock) as mock_log:
+    with patch("utils.aggregator.best_effort_log", new_callable=AsyncMock) as mock_log:
         first = await agg.gather_data("plant", {"moisture1": 1})
         assert first is True  # this one is buffered, not dropped
 
@@ -91,7 +91,7 @@ async def test_drop_log_throttling_suppresses_repeats():
 async def test_ring_buffer_overflow_logs_error_severity():
     agg = HydroponicAggregator(min_interval=0.0, ring_size=2, timeout=60.0)
 
-    with patch("utils.aggregator._best_effort_log", new_callable=AsyncMock) as mock_log:
+    with patch("utils.aggregator.best_effort_log", new_callable=AsyncMock) as mock_log:
         for i in range(4):  # overflow the ring_size=2 buffer
             await agg.gather_data("plant", {"moisture1": i})
 
@@ -107,7 +107,7 @@ async def test_ring_buffer_overflow_logs_error_severity():
 async def test_queue_full_logs_critical_severity():
     agg = HydroponicAggregator(min_interval=0.0, queue_maxsize=1, timeout=999.0)
 
-    with patch("utils.aggregator._best_effort_log", new_callable=AsyncMock) as mock_log:
+    with patch("utils.aggregator.best_effort_log", new_callable=AsyncMock) as mock_log:
         for i in range(5):
             await agg.gather_data("plant", {"moisture1": i})
             await agg.gather_data("environment", {"temperature_atas": 20 + i})
@@ -124,7 +124,7 @@ async def test_queue_full_logs_critical_severity():
 async def test_stale_pair_timeout_drops_and_logs():
     agg = HydroponicAggregator(min_interval=0.0, timeout=0.05)
 
-    with patch("utils.aggregator._best_effort_log", new_callable=AsyncMock) as mock_log:
+    with patch("utils.aggregator.best_effort_log", new_callable=AsyncMock) as mock_log:
         await agg.gather_data("plant", {"moisture1": 1})
         await asyncio.sleep(0.1)  # exceed pairing timeout
         await agg.gather_data("environment", {"temperature_atas": 25})

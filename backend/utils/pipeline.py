@@ -4,6 +4,8 @@ import logging
 import time
 from typing import Any
 
+from utils.log_helpers import best_effort_log
+
 logger = logging.getLogger(__name__)
 
 _MAX_DB_RETRIES = 8
@@ -71,7 +73,7 @@ class SnapshotPipeline:
                     worker_id,
                 )
                 try:
-                    await self._write_log(
+                    await best_effort_log(
                         event_type="system",
                         severity="critical",
                         description=(
@@ -124,7 +126,7 @@ class SnapshotPipeline:
         if persisted:
             dataid = snapshot_dict.get("dataid")
             try:
-                await self._write_log(
+                await best_effort_log(
                     event_type="system",
                     severity="info",
                     description="Snapshot recorded",
@@ -140,7 +142,7 @@ class SnapshotPipeline:
                     "change_summary", "actuator change"
                 )
                 try:
-                    await self._write_log(
+                    await best_effort_log(
                         event_type="automation",
                         severity="info",
                         description=f"Automation toggled: {change_summary}",
@@ -186,7 +188,7 @@ class SnapshotPipeline:
                         exc_info=True,
                     )
                     try:
-                        await self._write_log(
+                        await best_effort_log(
                             event_type="system",
                             severity="critical",
                             description=(
@@ -282,29 +284,3 @@ class SnapshotPipeline:
                 actuator_res.updated_state()
         except Exception:
             logger.exception("[Pipeline] Error updating CoAP actuator Observe state.")
-
-    # ------------------------------------------------------------------
-    # Log helper (best-effort, own DB session)
-    # ------------------------------------------------------------------
-
-    async def _write_log(
-        self,
-        *,
-        event_type: str,
-        severity: str,
-        description: str,
-        userid: str | None = None,
-        data_ref: str | None = None,
-    ) -> None:
-        from utils.deps import get_db_session
-        from services.log_service import LogService
-
-        async with get_db_session() as session:
-            service = LogService(session)
-            await service.write_log(
-                event_type=event_type,
-                severity=severity,
-                description=description,
-                userid=userid,
-                data_ref=data_ref,
-            )

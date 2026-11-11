@@ -8,6 +8,7 @@ from typing import Any
 from uuid import uuid7
 
 from schemas import HydroponicIn
+from utils.log_helpers import best_effort_log
 
 logger = logging.getLogger(__name__)
 
@@ -25,26 +26,6 @@ class PendingPacket:
     source: str = field(compare=False)
     data: dict[str, Any] = field(compare=False)
     received_at: float = field(compare=False, default_factory=time.monotonic)
-
-
-async def _best_effort_log(
-    *, event_type: str, severity: str, description: str, data_ref: str | None = None
-) -> None:
-    """Fire-and-forget structured log write; never raises into caller."""
-    try:
-        from utils.deps import get_db_session
-        from services.log_service import LogService
-
-        async with get_db_session() as session:
-            svc = LogService(session)
-            await svc.write_log(
-                event_type=event_type,
-                severity=severity,
-                description=description,
-                data_ref=data_ref,
-            )
-    except Exception:
-        logger.exception("[Aggregator] Failed to write log entry: %s", description)
 
 
 class HydroponicAggregator:
@@ -193,7 +174,7 @@ class HydroponicAggregator:
                     )
                     if self._should_log_drop(f"rate_limit:{source}"):
                         asyncio.create_task(
-                            _best_effort_log(
+                            best_effort_log(
                                 event_type="system",
                                 severity="warning",
                                 description=(
@@ -220,7 +201,7 @@ class HydroponicAggregator:
                 )
                 if self._should_log_drop(f"ring_full:{source}"):
                     asyncio.create_task(
-                        _best_effort_log(
+                        best_effort_log(
                             event_type="system",
                             severity="error",
                             description=(
@@ -296,7 +277,7 @@ class HydroponicAggregator:
         for source, age in stale_events:
             if self._should_log_drop(f"stale_pair:{source}"):
                 asyncio.create_task(
-                    _best_effort_log(
+                    best_effort_log(
                         event_type="system",
                         severity="warning",
                         description=(
@@ -352,7 +333,7 @@ class HydroponicAggregator:
         for source, count, age in flush_events:
             if self._should_log_drop(f"partial_flush:{source}"):
                 asyncio.create_task(
-                    _best_effort_log(
+                    best_effort_log(
                         event_type="system",
                         severity="error",
                         description=(
@@ -380,7 +361,7 @@ class HydroponicAggregator:
             )
             if self._should_log_drop("queue_full"):
                 asyncio.create_task(
-                    _best_effort_log(
+                    best_effort_log(
                         event_type="system",
                         severity="critical",
                         description=(
