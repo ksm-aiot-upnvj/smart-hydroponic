@@ -86,7 +86,7 @@ export class HydroponicsService {
   }
   /**
    * Get Public Hydroponic Data
-   * Endpoint publik untuk mendapatkan data hidroponik terbaru tanpa autentikasi.
+   * Public endpoint to fetch the latest hydroponic data without authentication.
    * @param page
    * @param limit
    * @param startDate
@@ -145,7 +145,7 @@ export class HydroponicsService {
   }
   /**
    * Test Sensor Data
-   * Endpoint untuk menguji WebSocket sensor data hidroponik.
+   * Endpoint to test the hydroponic sensor-data WebSocket.
    * @returns string Successful Response
    * @throws ApiError
    */

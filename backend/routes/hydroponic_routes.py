@@ -138,7 +138,7 @@ async def get_public_hydroponic_data(
     current_user: UserOut | None = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """Endpoint publik untuk mendapatkan data hidroponik terbaru tanpa autentikasi."""
+    """Public endpoint to fetch the latest hydroponic data without authentication."""
     service = HydroponicService(session)
 
     limit = min(limit, 500)
@@ -207,7 +207,7 @@ async def control_hydroponic_actuators(
             actuator_res.latest_state = json.dumps(command_payload).encode("utf-8")
             actuator_res.updated_state()
             logging.getLogger(__name__).info(
-                f"[CoAP Debug] Mengirim notifikasi Observe ke aktuator: {command_payload}"
+                f"[CoAP Debug] Sending Observe notification to actuator: {command_payload}"
             )
             confirmed = True
         else:
@@ -239,7 +239,7 @@ async def control_hydroponic_actuators(
 
 @router.websocket("/ws/{device_type}")
 async def hydroponic_data_websocket(device_type: str, websocket: WebSocket):
-    """WebSocket endpoint untuk menerima data hidroponik secara real-time.
+    """WebSocket endpoint to receive hydroponic data in real time.
 
     Receive loop deliberately avoids blocking work (DB, profile fetches,
     broadcast). It validates, buffers via the aggregator, then sends exactly
@@ -413,5 +413,5 @@ async def hydroponic_data_websocket(device_type: str, websocket: WebSocket):
 
 @router.get("/test-sensor-data", response_class=HTMLResponse)
 async def test_sensor_data(request: Request):
-    """Endpoint untuk menguji WebSocket sensor data hidroponik."""
+    """Endpoint to test the hydroponic sensor-data WebSocket."""
     return templates.TemplateResponse("test_ws_sensor_data.html", {"request": request})

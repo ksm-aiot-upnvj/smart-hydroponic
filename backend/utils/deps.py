@@ -87,7 +87,7 @@ async def get_optional_current_user(
     return UserOut.model_validate(user)
 
 
-# Untuk penggunaan di luar konteks Depends e.g WebSocket
+# For use outside a Depends context, e.g. WebSocket handlers.
 @asynccontextmanager
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """Context manager to provide a SQLAlchemy async session."""
