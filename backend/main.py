@@ -1,10 +1,10 @@
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from utils.deps import get_session
+from utils.templates import templates
 import tomllib
 from pathlib import Path
 from routes.user_routes import router as user_router
@@ -123,8 +123,6 @@ app = FastAPI(
         },
     ],
 )
-
-templates = Jinja2Templates(directory="templates")
 
 cors_origins = settings.cors_allow_origins
 
