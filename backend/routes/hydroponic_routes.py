@@ -29,15 +29,13 @@ from utils.aggregator import aggregator
 from utils.deps import require_role
 from utils.converter import _parse_datetime_input
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
+from utils.templates import templates
 from datetime import timedelta
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/hydroponics", tags=["Hydroponics"])
-
-templates = Jinja2Templates(directory="./templates")
 
 DEVICE_CONFIG = {
     "sensor-data": {
