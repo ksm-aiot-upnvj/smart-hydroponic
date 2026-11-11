@@ -5,8 +5,6 @@
 import type { HydroponicControlResult } from "../models/HydroponicControlResult";
 import type { HydroponicDashboardOut } from "../models/HydroponicDashboardOut";
 import type { HydroponicDataActuator } from "../models/HydroponicDataActuator";
-import type { HydroponicIn } from "../models/HydroponicIn";
-import type { HydroponicOut } from "../models/HydroponicOut";
 import type { ResponseList_HydroponicOut_ } from "../models/ResponseList_HydroponicOut_";
 import type { CancelablePromise } from "../core/CancelablePromise";
 import { OpenAPI } from "../core/OpenAPI";
@@ -52,26 +50,6 @@ export class HydroponicsService {
         start_date: startDate,
         end_date: endDate,
       },
-      errors: {
-        422: `Validation Error`,
-      },
-    });
-  }
-  /**
-   * Add Hydroponic Data
-   * Endpoint untuk menambahkan data hidroponik baru.
-   * @param requestBody
-   * @returns HydroponicOut Successful Response
-   * @throws ApiError
-   */
-  public static addHydroponicData(
-    requestBody: HydroponicIn,
-  ): CancelablePromise<HydroponicOut> {
-    return __request(OpenAPI, {
-      method: "POST",
-      url: "/hydroponics/data",
-      body: requestBody,
-      mediaType: "application/json",
       errors: {
         422: `Validation Error`,
       },
