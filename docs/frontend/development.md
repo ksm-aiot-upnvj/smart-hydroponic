@@ -35,6 +35,12 @@ Jalankan dari folder `frontend-vue`.
    npm run dev
    ```
 
+   Secara default, dev server mem-proxy `/smart-hydroponic` ke `http://127.0.0.1:8000` (lihat `vite.config.ts`). Untuk mengarahkan ke backend lain, set variabel `VITE_API_TARGET` sebelum menjalankan Vite:
+
+   ```bash
+   VITE_API_TARGET=http://192.168.1.10:8000 npm run dev
+   ```
+
 3. Buka alamat yang muncul di terminal, biasanya:
 
    ```text
@@ -51,7 +57,12 @@ Pastikan backend berjalan, lalu jalankan dari folder `frontend-vue`:
 npm run generate-api
 ```
 
-Command ini membaca schema OpenAPI backend dan memperbarui file di `src/api`.
+Command ini membaca schema OpenAPI backend dan memperbarui file di `src/api`. Script memakai `--client axios`, sesuai dengan file yang ada di repo saat ini (`src/api/core/request.ts` berbasis axios).
+
+Setelah generate, periksa kembali `src/api/core/OpenAPI.ts` karena seluruh folder `src/api` ditimpa:
+
+1. `BASE` harus kembali ke `/smart-hydroponic/api/v2` (harus sama dengan `root_path` di `backend/main.py`).
+2. `VERSION` harus disamakan dengan versi di `backend/pyproject.toml` (dan `frontend-vue/package.json`).
 
 ## Cara Mengecek Berhasil
 

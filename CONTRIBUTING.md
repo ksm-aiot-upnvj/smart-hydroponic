@@ -62,6 +62,27 @@ Examples:
 	- How it was tested
 4. Link related issues when applicable.
 
+## Local Backend Runs and `.env`
+
+The repository root `.env` is the single source of configuration. `backend/config/config.py`
+loads the `.env` file found in the current working directory, so:
+
+1. Keep only the root `.env`. Do not create a second, conflicting `backend/.env`.
+2. Prefer running the backend from the repository root so the root `.env` is loaded:
+
+   ```bash
+   uv run --project backend uvicorn --app-dir backend main:app --reload
+   ```
+
+3. If you must run from `backend/`, point the tool at the root file explicitly:
+
+   ```bash
+   uv run uvicorn main:app --reload --env-file ../.env
+   ```
+
+Docker Compose injects the same variables as process environment variables, which
+take precedence over any `.env` file, so container behaviour is unaffected.
+
 ## Validation Before Push
 
 1. For backend changes, run backend checks/tests.
