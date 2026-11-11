@@ -1,13 +1,13 @@
 import asyncio
 import logging
 
-import bcrypt
 from sqlalchemy import text
 
 from config.config import settings
 from config.db import Session
 from models.user import User
 from schemas.user import UserRole
+from utils.security import hash_password
 
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ async def create_superuser():
         logger.error("Missing environment variables for superuser creation.")
         return
 
-    hashed_password = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
+    hashed_password = hash_password(password)
     async with Session() as session:
         async with session.begin():
             existing_user = await session.execute(
@@ -38,7 +38,7 @@ async def create_superuser():
             new_user = User(
                 username=username,
                 email=email,
-                password=hashed_password.decode("utf-8"),
+                password=hashed_password,
                 role=role,
                 is_superuser=True,
             )

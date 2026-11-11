@@ -5,8 +5,8 @@ from fastapi import HTTPException
 from authlib.jose import jwt
 from config.config import settings
 from utils.crypto import load_signing_key, load_verification_key
+from utils.security import hash_password, verify_password
 from schemas.user import UserLogin, UserUpdate, UserOut, TokenPayload
-import bcrypt
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
@@ -14,6 +14,14 @@ from sqlalchemy import text
 
 
 class UserService:
+    """Data access + auth logic for user accounts.
+
+    All user queries use raw SQL via ``sqlalchemy.text()`` on purpose: it keeps
+    the user-query surface area explicit and easy to audit. This differs from
+    the ORM-based services (e.g. ``HydroponicService``) by intentional choice,
+    not oversight.
+    """
+
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -41,9 +49,7 @@ class UserService:
 
         if not user:
             raise HTTPException(status_code=401, detail="Invalid username or password")
-        if not bcrypt.checkpw(
-            user_credentials.password.encode("utf-8"), user["password"].encode("utf-8")
-        ):
+        if not verify_password(user_credentials.password, user["password"]):
             raise HTTPException(status_code=401, detail="Invalid username or password")
         return UserOut.model_validate(user)
 
@@ -85,7 +91,7 @@ class UserService:
             "userid": user_id,
             "username": user_data["username"],
             "email": user_data["email"],
-            "password": user_data["password"],
+            "password": hash_password(user_data["password"]),
             "role": role,
             "is_superuser": bool(user_data.get("is_superuser", False)),
             "fullname": user_data.get("fullname"),
@@ -143,10 +149,7 @@ class UserService:
             return user
 
         if "password" in update_data:
-            hashed = bcrypt.hashpw(
-                update_data["password"].encode("utf-8"), bcrypt.gensalt()
-            ).decode("utf-8")
-            update_data["password"] = hashed
+            update_data["password"] = hash_password(update_data["password"])
             update_data["token_version"] = int(user.get("token_version", 0)) + 1
 
         update_data = {
@@ -170,7 +173,7 @@ class UserService:
             return await self.get_user_by_id(user_id)
         except IntegrityError:
             await self.session.rollback()
-            raise ValueError("Username already registered")
+            raise
 
     async def delete_user(self, user_id: str):
         stmt = text(
@@ -192,22 +195,16 @@ class UserService:
             raise HTTPException(status_code=404, detail="User not found")
 
         stored_password = user["password"]
-        if not bcrypt.checkpw(
-            current_password.encode("utf-8"), stored_password.encode("utf-8")
-        ):
+        if not verify_password(current_password, stored_password):
             raise HTTPException(status_code=400, detail="Current password is invalid")
 
-        if bcrypt.checkpw(
-            new_password.encode("utf-8"), stored_password.encode("utf-8")
-        ):
+        if verify_password(new_password, stored_password):
             raise HTTPException(
                 status_code=400,
                 detail="New password must be different from current password",
             )
 
-        hashed = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode(
-            "utf-8"
-        )
+        hashed = hash_password(new_password)
         stmt = text(
             """
             UPDATE user_data
