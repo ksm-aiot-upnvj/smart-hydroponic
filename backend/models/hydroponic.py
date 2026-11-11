@@ -61,18 +61,6 @@ class HydroponicData(Base):
         DOUBLE_PRECISION,
         Computed("((humidity_atas + humidity_bawah) / 2.0)", persisted=True),
     )
-    light_intensity_atas: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default="0"
-    )
-    light_intensity_bawah: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default="0"
-    )
-    light_intensity_avg: Mapped[float] = mapped_column(
-        DOUBLE_PRECISION,
-        Computed(
-            "((light_intensity_atas + light_intensity_bawah) / 2.0)", persisted=True
-        ),
-    )
 
     # Actuator Data
     pump_status: Mapped[bool] = mapped_column(Boolean, nullable=False)

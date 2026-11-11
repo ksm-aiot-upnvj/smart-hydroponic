@@ -105,8 +105,6 @@ class HydroponicIn(HydroponicAggregate):
                 "temperature_bawah": 24.0,
                 "humidity_atas": 60.0,
                 "humidity_bawah": 65.0,
-                "light_intensity_atas": 700,
-                "light_intensity_bawah": 650,
                 "pump_status": 1,
                 "light_status": 1,
                 "automation_status": 1,
