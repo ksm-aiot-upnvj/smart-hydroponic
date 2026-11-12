@@ -64,6 +64,29 @@ Setelah generate, periksa kembali `src/api/core/OpenAPI.ts` karena seluruh folde
 1. `BASE` harus kembali ke `/smart-hydroponic/api/v2` (harus sama dengan `root_path` di `backend/main.py`).
 2. `VERSION` harus disamakan dengan versi di `backend/pyproject.toml` (dan `frontend-vue/package.json`).
 
+## Git Hooks
+
+Repository memakai `pre-commit` agar pemeriksaan frontend berjalan otomatis sebelum `commit` dan `push`
+(detail lengkap di [CONTRIBUTING.md](../../CONTRIBUTING.md#git-hooks)). Pasang sekali dari root repository:
+
+```bash
+npm --prefix frontend-vue install
+uv run --project backend pre-commit install
+```
+
+- Sebelum commit: type check `vue-tsc -b` bila ada file frontend yang di-stage.
+- Sebelum push: `npm --prefix frontend-vue run build` (`vue-tsc -b && vite build`).
+
+Menjalankan manual dari root repository:
+
+```bash
+uv run --project backend pre-commit run --hook-stage pre-commit
+uv run --project backend pre-commit run --hook-stage pre-push --all-files
+```
+
+Catatan: saat ini frontend belum punya konfigurasi ESLint/Prettier; gerbang mutu frontend adalah
+type check TypeScript/Vue dan build produksi.
+
 ## Cara Mengecek Berhasil
 
 Frontend berjalan dengan benar jika:
