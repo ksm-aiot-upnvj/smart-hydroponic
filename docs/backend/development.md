@@ -40,26 +40,27 @@ Penjelasan istilah singkat tersedia di [Glossary](../glossary.md).
 
 ## Menjalankan Untuk Development
 
-Jalankan dari folder `backend`.
+Konfigurasi disimpan di satu file `.env` pada root repository. `backend/config/config.py`
+membaca `.env` dari direktori kerja, jadi jalankan perintah berikut dari root repository.
 
 1. Install dependency.
 
    ```bash
-   uv sync
+   uv sync --project backend
    ```
 
-2. Pastikan database sudah berjalan dan file `.env` sudah benar.
+2. Pastikan database sudah berjalan dan file `.env` di root repository sudah benar.
 
 3. Jalankan migration.
 
    ```bash
-   uv run alembic upgrade head
+   uv run --project backend alembic -c backend/alembic.ini upgrade head
    ```
 
 4. Jalankan server development.
 
    ```bash
-   uv run fastapi dev main.py
+   uv run --project backend uvicorn --app-dir backend main:app --reload
    ```
 
 5. Cek health check.

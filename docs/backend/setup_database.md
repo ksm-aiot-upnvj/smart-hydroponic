@@ -96,15 +96,15 @@ Jika backend berjalan di Docker Compose, `PGHOST` untuk backend biasanya `db` ka
 
 ## Menjalankan Migration
 
-Jalankan dari folder `backend`:
+Jalankan dari root repository:
 
 ```bash
-uv run alembic upgrade head
+uv run --project backend alembic -c backend/alembic.ini upgrade head
 ```
 
 Migration membuat struktur tabel sesuai kebutuhan aplikasi.
 
-> **Catatan `alembic.ini`:** nilai `sqlalchemy.url` di `backend/alembic.ini` sengaja dibiarkan sebagai placeholder (`driver://user:pass@localhost/dbname`) dan tidak boleh diisi kredensial asli. Saat menjalankan `alembic` dari folder `backend`, `migrations/env.py` akan menimpa nilai tersebut dengan `settings.DATABASE_URL` yang dibangun dari variabel `PG*` pada `.env` di root repository. Karena itu, jalankan `alembic` dari folder `backend` dengan file `.env` root sudah terisi; jangan mengandalkan URL di `alembic.ini`.
+> **Catatan `alembic.ini`:** nilai `sqlalchemy.url` di `backend/alembic.ini` sengaja dibiarkan sebagai placeholder (`driver://user:pass@localhost/dbname`) dan tidak boleh diisi kredensial asli. Saat menjalankan `alembic`, `migrations/env.py` akan menimpa nilai tersebut dengan `settings.DATABASE_URL` yang dibangun dari variabel `PG*` pada `.env` di root repository. Karena itu, jalankan `alembic` dari root repository (seperti perintah di atas) dengan file `.env` root sudah terisi; jangan mengandalkan URL di `alembic.ini`.
 
 ## Cara Mengecek Berhasil
 

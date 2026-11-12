@@ -26,24 +26,28 @@ README ini membantu Anda menjalankan backend dari folder `backend`. Jika Anda ba
 
 ## Menjalankan Backend Lokal
 
-Jalankan command berikut dari folder `backend`.
+Konfigurasi disimpan di satu file `.env` pada **root repository**. `backend/config/config.py`
+membaca `.env` dari direktori kerja, jadi jalankan perintah berikut dari root repository.
 
 1. Install dependency.
 
    ```bash
-   uv sync
+   uv sync --project backend
    ```
 
    Tujuan command ini adalah menyiapkan virtual environment dan dependency Python.
 
 2. Siapkan file environment.
 
-   Jika Anda menjalankan backend dari root repository dengan Docker, gunakan `.env` di root. Jika menjalankan backend langsung dari folder `backend`, pastikan file `backend/.env` tersedia dan nilainya sesuai database lokal.
+   Salin `.env.example` menjadi `.env` di root repository. Jangan membuat `backend/.env`
+   terpisah, karena itu menjadi sumber konfigurasi kedua yang bisa saling bertentangan.
+   Jika Anda tetap menjalankan backend dari folder `backend`, arahkan file root secara
+   eksplisit dengan `--env-file ../.env`.
 
 3. Jalankan migration database.
 
    ```bash
-   uv run alembic upgrade head
+   uv run --project backend alembic -c backend/alembic.ini upgrade head
    ```
 
    Migration membuat atau memperbarui tabel database agar sesuai dengan kode backend.
@@ -51,7 +55,7 @@ Jalankan command berikut dari folder `backend`.
 4. Jalankan server.
 
    ```bash
-   uv run fastapi dev main.py
+   uv run --project backend uvicorn --app-dir backend main:app --reload
    ```
 
 5. Buka health check.

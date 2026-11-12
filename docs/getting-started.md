@@ -194,31 +194,25 @@ Password : password_lokal_anda
 
 Jika database belum dibuat, buat database terlebih dahulu sesuai cara instalasi PostgreSQL yang Anda gunakan.
 
-### Langkah 4. Siapkan file `.env` di folder backend
+### Langkah 4. Siapkan file `.env` di root repository
 
-Untuk menjalankan backend tanpa Docker, file `.env` harus tersedia di folder `backend/`.
+Backend memakai satu sumber konfigurasi saja: file `.env` di **root repository**.
+Jangan membuat file `backend/.env` terpisah, karena itu menjadi sumber konfigurasi
+kedua yang bisa saling bertentangan.
 
-Masuk ke folder backend:
-
-```bash
-cd backend
-```
-
-Salin file contoh environment dari root repository ke folder backend:
+Dari root repository:
 
 ```bash
-cp ../.env.example .env
+cp .env.example .env
 ```
 
 Di Windows PowerShell:
 
 ```powershell
-Copy-Item ..\.env.example .env
+Copy-Item .env.example .env
 ```
 
-Isi `backend/.env` sesuai database lokal.
-
-Contoh:
+Isi `.env` di root repository sesuai database lokal. Contoh:
 
 ```env
 PGHOST=localhost
@@ -232,40 +226,45 @@ JWT_PUBLIC_KEY=keys/public.pem
 JWT_EXPIRES_IN=waktu_hidup_token
 ```
 
-Perhatikan perbedaannya:
+Perhatikan:
 
-- Docker memakai `.env` di root repository.
-- Tanpa Docker memakai `.env` di folder `backend/`.
+- Docker dan backend tanpa Docker sama-sama membaca `.env` di root repository.
+- `backend/config/config.py` memuat file `.env` dari direktori kerja saat ini, jadi jalankan perintah backend dari root repository seperti pada langkah berikut.
 - Jika backend berjalan langsung di laptop, `PGHOST` biasanya `localhost`.
 - Jika backend berjalan di Docker, host database biasanya nama service seperti `db`.
 
 ### Langkah 5. Install dependency backend
 
-Masih dari folder `backend`, jalankan:
+Dari root repository, jalankan:
 
 ```bash
-uv sync
+uv sync --project backend
 ```
 
 Command ini memasang dependency Python sesuai `backend/pyproject.toml` dan `backend/uv.lock`.
 
 ### Langkah 6. Jalankan migration database
 
-Masih dari folder `backend`, jalankan:
+Masih dari root repository, jalankan:
 
 ```bash
-uv run alembic upgrade head
+uv run --project backend alembic -c backend/alembic.ini upgrade head
 ```
 
 Migration membuat atau memperbarui struktur tabel database agar sesuai dengan kode backend.
 
 ### Langkah 7. Jalankan backend
 
-Masih dari folder `backend`, jalankan:
+Masih dari root repository, jalankan:
 
 ```bash
-uv run fastapi dev main.py
+uv run --project backend uvicorn --app-dir backend main:app --reload
 ```
+
+Perintah ini dijalankan dari root repository supaya `backend/config/config.py`
+membaca file `.env` di root. Jika Anda memang harus menjalankan dari folder
+`backend`, arahkan file `.env` secara eksplisit dengan
+`uv run uvicorn main:app --reload --env-file ../.env`.
 
 Tanda berhasil: terminal menampilkan server berjalan pada alamat lokal, biasanya:
 
@@ -339,7 +338,7 @@ Untuk jalur tanpa Docker:
 ## Jika Terjadi Error
 
 - Jika container database belum sehat, cek nilai `PGUSER`, `PGPASSWORD`, dan `PGDATABASE` di `.env`.
-- Jika backend tanpa Docker gagal connect database, pastikan `backend/.env` sudah ada dan `DATABASE_URL` memakai host serta port database lokal.
+- Jika backend tanpa Docker gagal connect database, pastikan file `.env` di root repository sudah ada dan `DATABASE_URL` memakai host serta port database lokal.
 - Jika migration gagal, pastikan database sudah dibuat dan user database punya hak akses.
 - Jika frontend terbuka tetapi data kosong, pastikan backend berjalan dan URL API sesuai.
 - Jika port `8000`, `8080`, `5173`, `5432`, atau `5433` sudah dipakai aplikasi lain, hentikan aplikasi tersebut atau ubah port yang digunakan.

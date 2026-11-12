@@ -81,7 +81,7 @@ Hentikan aplikasi lain yang memakai port tersebut atau ubah mapping port pada fi
 
 1. Pastikan database sudah berjalan.
 2. Pastikan `DATABASE_URL` benar.
-3. Jalankan migration dari folder `backend`.
+3. Jalankan migration dari root repository: `uv run --project backend alembic -c backend/alembic.ini upgrade head`.
 4. Baca pesan error paling atas dan paling bawah, karena biasanya bagian itu menunjukkan penyebab utama.
 
 ## NGINX Menampilkan 502 Bad Gateway
