@@ -181,7 +181,7 @@ const firstName = computed(() => {
   if (!authState.isLoggedIn) return "User";
 
   const fullName = authState.user?.fullname || "Admin";
-  const firstWord = fullName.split(" ")[0];
+  const firstWord = fullName.split(" ")[0] ?? "";
 
   return firstWord.charAt(0).toUpperCase() + firstWord.slice(1);
 });
