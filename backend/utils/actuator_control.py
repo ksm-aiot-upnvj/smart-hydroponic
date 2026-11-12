@@ -53,7 +53,7 @@ def build_actuator_control_payload(
             else:
                 if moisture_avg < settings.HYDROPONIC_MOISTURE_THRESHOLD:
                     pump_status = True
-                elif moisture_avg >= settings.HYDROPONIC_MOISTURE_THRESHOLD:
+                else:
                     pump_status = False
 
         if temperature_avg is not None:
@@ -65,7 +65,7 @@ def build_actuator_control_payload(
             else:
                 if temperature_avg < settings.HYDROPONIC_TEMPERATURE_THRESHOLD:
                     light_status = True
-                elif temperature_avg >= settings.HYDROPONIC_TEMPERATURE_THRESHOLD:
+                else:
                     light_status = False
 
     pump_changed = pump_status != current_pump
