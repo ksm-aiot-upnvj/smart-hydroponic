@@ -314,6 +314,34 @@ Sistem tanpa Docker dianggap berjalan jika:
 4. Frontend berjalan di URL Vite.
 5. Dashboard dapat mengirim request ke backend.
 
+## Menyiapkan Git Hooks (Disarankan)
+
+Repository memakai `pre-commit` untuk menjalankan pemeriksaan otomatis sebelum
+`commit` dan `push`, sehingga masalah format, lint, tipe, dan test tertangkap
+sebelum sampai ke remote.
+
+Sekali saja, dari root repository:
+
+```bash
+uv sync --project backend
+npm --prefix frontend-vue install
+uv run --project backend pre-commit install
+```
+
+Setelah terpasang:
+
+- **Sebelum commit**: `ruff check` dan `ruff format --check` pada file Python backend yang di-stage, plus type check `vue-tsc` bila ada file frontend yang di-stage.
+- **Sebelum push**: `ruff check .`, `ruff format --check .`, `pytest -q`, dan `npm run build`.
+
+Menjalankan pemeriksaan secara manual, dari root repository:
+
+```bash
+uv run --project backend pre-commit run --hook-stage pre-commit
+uv run --project backend pre-commit run --hook-stage pre-push --all-files
+```
+
+Detail lengkap ada di [CONTRIBUTING.md](../CONTRIBUTING.md#git-hooks).
+
 ## Cara Mengecek Berhasil
 
 Untuk jalur Docker:

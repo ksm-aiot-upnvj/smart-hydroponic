@@ -83,6 +83,26 @@ Beberapa hal yang perlu diketahui:
 - Sebagian file di `test/` adalah simulasi perangkat (misalnya `test_esp32.py`), bukan test otomatis, sehingga tidak menambah jumlah test yang dijalankan.
 - Hasil yang diharapkan: seluruh test lulus tanpa warning.
 
+## Git Hooks
+
+Repository memakai `pre-commit` agar pemeriksaan backend berjalan otomatis sebelum `commit` dan `push`
+(detail lengkap di [CONTRIBUTING.md](../../CONTRIBUTING.md#git-hooks)). Pasang sekali dari root repository:
+
+```bash
+uv sync --project backend
+uv run --project backend pre-commit install
+```
+
+- Sebelum commit: `ruff check` dan `ruff format --check` pada file Python backend yang di-stage.
+- Sebelum push: `ruff check .`, `ruff format --check .`, dan `pytest -q`.
+
+Menjalankan manual dari root repository:
+
+```bash
+uv run --project backend pre-commit run --hook-stage pre-commit
+uv run --project backend pre-commit run --hook-stage pre-push --all-files
+```
+
 ## Cara Mengecek Berhasil
 
 Backend berjalan dengan benar jika:

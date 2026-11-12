@@ -85,9 +85,65 @@ take precedence over any `.env` file, so container behaviour is unaffected.
 
 ## Validation Before Push
 
+The repository installs Git hooks that run the same quality gates as CI, so a
+normal `git commit` / `git push` is enough to catch problems early. See
+[Git Hooks](#git-hooks) below.
+
 1. For backend changes, run backend checks/tests.
 2. For frontend changes, run frontend checks/tests.
 3. Ensure CI workflows pass before requesting final review.
+
+## Git Hooks
+
+Hooks are managed with the [`pre-commit`](https://pre-commit.com) framework.
+A single `.pre-commit-config.yaml` covers both toolchains through
+`language: system` hooks, so the repository does not need a second, overlapping
+manager (for example Husky) and does not need a POSIX shell script on Windows.
+
+### Required tooling
+
+1. `uv` — the hooks call the backend tools through `uv`.
+2. `npm` with `frontend-vue/node_modules` installed (`npm --prefix frontend-vue install`).
+
+### Installation
+
+Run once from the repository root:
+
+```bash
+uv run --project backend pre-commit install
+```
+
+`default_install_hook_types` in `.pre-commit-config.yaml` installs both the
+`pre-commit` and the `pre-push` hook. The command is idempotent and does not
+change unrelated Git configuration. CI does not depend on this step; the hooks
+only guard local commits and pushes.
+
+### What runs before commit (fast, staged files only)
+
+1. `ruff check` on staged backend Python files.
+2. `ruff format --check` on staged backend Python files.
+3. `vue-tsc -b` type check when frontend files are staged.
+
+### What runs before push (full gates, mirrors CI)
+
+1. `uv run --directory backend ruff check .`
+2. `uv run --directory backend ruff format --check .`
+3. `uv run --directory backend pytest -q`
+4. `npm --prefix frontend-vue run build` (`vue-tsc -b && vite build`)
+
+### Running the checks manually
+
+```bash
+uv run --project backend pre-commit run --hook-stage pre-commit
+uv run --project backend pre-commit run --hook-stage pre-push --all-files
+```
+
+### Troubleshooting
+
+1. `pre-commit` not found — run `uv sync --project backend`, the tool is a dev dependency.
+2. Hook does not run — reinstall with `uv run --project backend pre-commit install`.
+3. Frontend hooks fail with a missing `node_modules` — run `npm --prefix frontend-vue install`.
+4. Bypassing hooks with `--no-verify` is discouraged and should only be used in an emergency.
 
 ## Collaboration Rules
 
