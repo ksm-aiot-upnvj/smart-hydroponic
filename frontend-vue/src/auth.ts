@@ -1,12 +1,17 @@
 import { reactive } from "vue";
 import { OpenAPI } from "./api";
+import type { AccountSummary, UserOut } from "./api";
 
-const getStoredUser = () => {
+// Shape of the signed-in user kept in localStorage. It is either the login
+// summary or the full profile returned by the users endpoints.
+export type SessionUser = AccountSummary | UserOut;
+
+const getStoredUser = (): SessionUser | null => {
   const storedUser = localStorage.getItem("user");
   if (!storedUser) return null;
 
   try {
-    return JSON.parse(storedUser);
+    return JSON.parse(storedUser) as SessionUser;
   } catch {
     localStorage.removeItem("user");
     return null;
@@ -22,7 +27,7 @@ export const authState = reactive({
   isLoggedIn: !!storedToken,
   user: getStoredUser(),
 
-  setSession(token: string, user: unknown) {
+  setSession(token: string, user: SessionUser) {
     localStorage.setItem("token", token);
     localStorage.setItem("user", JSON.stringify(user));
     OpenAPI.TOKEN = token;

@@ -292,6 +292,7 @@ import Topbar from "@/components/Topbar.vue";
 import brandLogo from "@/assets/images/logo-hydroponic.png";
 import { authState } from "../auth";
 import { UsersService, ApiError, UserRole } from "../api";
+import type { UserOut } from "../api";
 import { getApiErrorMessage } from "../utils/apiError";
 
 type AdminTableItem = {
@@ -322,7 +323,7 @@ const activeCount = computed(
     ).length,
 );
 
-const mapUserToAdminItem = (user: any): AdminTableItem => {
+const mapUserToAdminItem = (user: UserOut): AdminTableItem => {
   return {
     id: user.userid,
     username: user.username,
@@ -353,7 +354,7 @@ const formatDate = (dateValue: string) => {
 };
 
 const isOwnAccount = (userId: string) => {
-  return authState.user && (authState.user as any).userid === userId;
+  return authState.user?.userid === userId;
 };
 
 const fetchAdmins = async () => {
