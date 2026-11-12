@@ -1,0 +1,78 @@
+# Git hooks for the Smart Hydroponic repository.
+#
+# Manager: the `pre-commit` framework (https://pre-commit.com).
+# Why: one version-controlled configuration covers both the Python (Ruff,
+# pytest) and Node.js (vue-tsc, Vite) toolchains through `language: system`
+# hooks, so there is no second, overlapping manager (for example Husky) and no
+# hand-rolled shell script that would need a POSIX shell on Windows.
+#
+# One-time install, from the repository root:
+#   uv run --project backend pre-commit install
+# `default_install_hook_types` below installs both the pre-commit and the
+# pre-push hook, and re-running the command is safe (idempotent).
+#
+# Run the hooks manually, from the repository root:
+#   uv run --project backend pre-commit run --hook-stage pre-commit
+#   uv run --project backend pre-commit run --hook-stage pre-push --all-files
+default_install_hook_types: [pre-commit, pre-push]
+
+repos:
+  - repo: local
+    hooks:
+      # --- pre-commit: fast, scoped to the staged files ----------------------
+      - id: backend-ruff-check
+        name: "backend: ruff check (staged)"
+        entry: uv run --project backend ruff check --force-exclude
+        language: system
+        types: [python]
+        files: ^backend/
+        stages: [pre-commit]
+
+      - id: backend-ruff-format
+        name: "backend: ruff format --check (staged)"
+        entry: uv run --project backend ruff format --check --force-exclude
+        language: system
+        types: [python]
+        files: ^backend/
+        stages: [pre-commit]
+
+      - id: frontend-type-check
+        name: "frontend: vue-tsc type check"
+        entry: npm --prefix frontend-vue run type-check
+        language: system
+        pass_filenames: false
+        files: ^frontend-vue/
+        stages: [pre-commit]
+
+      # --- pre-push: full gates, mirrors .github/workflows/ci-backend.yml ---
+      - id: backend-ruff-check-all
+        name: "backend: ruff check ."
+        entry: uv run --directory backend ruff check .
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: backend-ruff-format-all
+        name: "backend: ruff format --check ."
+        entry: uv run --directory backend ruff format --check .
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: backend-pytest
+        name: "backend: pytest -q"
+        entry: uv run --directory backend pytest -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: frontend-build
+        name: "frontend: npm run build (vue-tsc + vite build)"
+        entry: npm --prefix frontend-vue run build
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
