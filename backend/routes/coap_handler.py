@@ -1,7 +1,9 @@
-import aiocoap.resource as resource
-import aiocoap
 import json
 import logging
+
+import aiocoap
+import aiocoap.resource as resource
+
 from schemas import (
     HydroponicDataPlant,
     HydroponicDataEnvironment,

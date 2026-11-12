@@ -34,9 +34,7 @@ class HydroponicAggregator:
         queue_maxsize: int = _PROCESS_QUEUE_MAXSIZE,
     ):
         self.timeout: float = (
-            timeout
-            if timeout is not None
-            else settings.HYDROPONIC_PAIR_TIMEOUT_SECONDS
+            timeout if timeout is not None else settings.HYDROPONIC_PAIR_TIMEOUT_SECONDS
         )
         self.min_interval: float = (
             min_interval
