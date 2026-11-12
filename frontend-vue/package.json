@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "type-check": "vue-tsc -b",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
     "generate-api": "npx openapi-typescript-codegen --input http://127.0.0.1:8000/smart-hydroponic/api/v2/openapi.json --output src/api --client axios"
