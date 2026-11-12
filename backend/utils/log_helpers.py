@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -9,8 +8,8 @@ async def best_effort_log(
     event_type: str,
     severity: str,
     description: str,
-    userid: Optional[str] = None,
-    data_ref: Optional[str] = None,
+    userid: str | None = None,
+    data_ref: str | None = None,
 ) -> None:
     """Fire-and-forget structured log write; never raises into the caller.
 

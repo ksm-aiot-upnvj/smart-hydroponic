@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, ConfigDict, AliasChoices, computed_field
 import datetime
-from typing import Optional
 from uuid import UUID, uuid7
 from typing import Generic, TypeVar, List
 
@@ -32,11 +31,6 @@ class MetaData(BaseModel):
 class ResponseList(BaseModel, Generic[T]):
     meta: MetaData
     data: List[T]
-
-
-class HydroponicInternalResult(BaseModel):
-    data: List[HydroponicOut]
-    total: int | None
 
 
 class HydroponicDataPlant(BaseModel):
@@ -114,29 +108,29 @@ class HydroponicIn(HydroponicAggregate):
 
 
 class HydroponicOut(HydroponicAggregate):
-    moisture1: Optional[int] = None
-    moisture2: Optional[int] = None
-    moisture3: Optional[int] = None
-    moisture4: Optional[int] = None
-    moisture5: Optional[int] = None
-    moisture6: Optional[int] = None
-    moisture_avg: Optional[float] = None
-    flowrate: Optional[float] = None
-    total_litres: Optional[float] = None
-    distance_cm: Optional[float] = None
+    moisture1: int | None = None
+    moisture2: int | None = None
+    moisture3: int | None = None
+    moisture4: int | None = None
+    moisture5: int | None = None
+    moisture6: int | None = None
+    moisture_avg: float | None = None
+    flowrate: float | None = None
+    total_litres: float | None = None
+    distance_cm: float | None = None
 
-    ph: Optional[float] = None
-    tds: Optional[float] = None
-    temperature_atas: Optional[float] = None
-    temperature_bawah: Optional[float] = None
-    temperature_avg: Optional[float] = None
-    humidity_atas: Optional[float] = None
-    humidity_bawah: Optional[float] = None
-    humidity_avg: Optional[float] = None
+    ph: float | None = None
+    tds: float | None = None
+    temperature_atas: float | None = None
+    temperature_bawah: float | None = None
+    temperature_avg: float | None = None
+    humidity_atas: float | None = None
+    humidity_bawah: float | None = None
+    humidity_avg: float | None = None
 
-    pump_status: Optional[bool] = None
-    light_status: Optional[bool] = None
-    automation_status: Optional[bool] = None
+    pump_status: bool | None = None
+    light_status: bool | None = None
+    automation_status: bool | None = None
 
     @computed_field
     @property
@@ -151,16 +145,16 @@ class HydroponicOut(HydroponicAggregate):
 
 
 class HydroponicDashboardOut(BaseModel):
-    flowrate: Optional[float] = None
-    distance_cm: Optional[float] = None
-    total_litres: Optional[float] = None
-    moisture_avg: Optional[float] = None
-    temperature_avg: Optional[float] = None
-    humidity_avg: Optional[float] = None
-    ph: Optional[float] = None
-    tds: Optional[float] = None
-    pump_status: Optional[bool] = None
-    light_status: Optional[bool] = None
-    automation_status: Optional[bool] = None
+    flowrate: float | None = None
+    distance_cm: float | None = None
+    total_litres: float | None = None
+    moisture_avg: float | None = None
+    temperature_avg: float | None = None
+    humidity_avg: float | None = None
+    ph: float | None = None
+    tds: float | None = None
+    pump_status: bool | None = None
+    light_status: bool | None = None
+    automation_status: bool | None = None
 
     model_config = ConfigDict(from_attributes=True)
