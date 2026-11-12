@@ -1,9 +1,9 @@
 import asyncio
 import json
+import logging
 from typing import Any
 
 import aiocoap
-import logging
 
 from config.config import settings
 
