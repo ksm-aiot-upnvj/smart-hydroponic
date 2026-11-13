@@ -1,3 +1,10 @@
+## [1.5.1](https://github.com/ksm-aiot-upnvj/smart-hydroponic/compare/frontend-v1.5.0...frontend-v1.5.1) (2026-11-13)
+
+### Bug Fixes
+
+* drop the stale addHydroponicData client method ([f35f008](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/f35f0087eed6c7747b49a4ea2b7e9fbc08feb58f))
+* type the session user and drop any casts ([274eb1e](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/274eb1e9121d5bf977662269263e9a2983cbe199))
+
 ## [1.5.0](https://github.com/ksm-aiot-upnvj/smart-hydroponic/compare/frontend-v1.4.0...frontend-v1.5.0) (2026-08-12)
 
 ### Features
