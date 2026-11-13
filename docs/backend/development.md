@@ -109,7 +109,7 @@ Backend berjalan dengan benar jika:
 
 1. Server FastAPI aktif tanpa error.
 2. Endpoint `/health` mengembalikan status sehat.
-3. Endpoint `/db-test` berhasil melakukan query sederhana ke database.
+3. Endpoint `/health/ready` berhasil melakukan query sederhana ke database (`200`) atau melaporkan `503` bila database tidak dapat dijangkau.
 4. Frontend dapat mengambil data dari backend.
 
 ## Jika Terjadi Error

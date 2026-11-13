@@ -1,6 +1,38 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator, model_validator
 from typing import Self
+import re
+
+
+_EXPIRY_PATTERN = re.compile(r"(\d+)\s*([smhdSMHD])?")
+_EXPIRY_MULTIPLIERS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+
+
+def parse_expiry_seconds(value: str) -> int:
+    """Parse an access-token expiry into a positive number of seconds.
+
+    Accepts a bare integer (interpreted as seconds) or ``<amount><unit>`` where
+    the unit is one of ``s``/``m``/``h``/``d``. Malformed, non-numeric, or
+    non-positive values raise ``ValueError``: a bad expiry is a configuration
+    error and must never be silently replaced by a default.
+    """
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("JWT_EXPIRES_IN must be a non-empty string")
+
+    match = _EXPIRY_PATTERN.fullmatch(value.strip())
+    if not match:
+        raise ValueError(
+            "JWT_EXPIRES_IN must be an integer number of seconds or use the "
+            "form <amount><unit> with unit one of s/m/h/d (for example "
+            "'3600' or '1h')"
+        )
+
+    amount = int(match.group(1))
+    unit = (match.group(2) or "s").lower()
+    seconds = amount * _EXPIRY_MULTIPLIERS[unit]
+    if seconds <= 0:
+        raise ValueError("JWT_EXPIRES_IN must be greater than zero")
+    return seconds
 
 
 class Settings(BaseSettings):
@@ -22,13 +54,6 @@ class Settings(BaseSettings):
     # Interface the CoAP server binds to. Loopback by default; containers set
     # COAP_HOST=0.0.0.0 so the ESP nodes can reach it.
     COAP_HOST: str = "127.0.0.1"
-    # Outbound CoAP client used to command the ESP8266 actuator. Keep the
-    # default on loopback so a missing configuration can never send commands
-    # to a production device by accident.
-    COAP_ACTUATOR_HOST: str = "127.0.0.1"
-    COAP_ACTUATOR_PORT: str = "5683"
-    COAP_ACTUATOR_CONTROL_PATH: str = "actuator/control"
-    COAP_ACTUATOR_TIMEOUT_SECONDS: float = 5.0
     # Aggregator pairing/rate-limit tuning.
     HYDROPONIC_MIN_INTERVAL_SECONDS: float = 0.1
     HYDROPONIC_PAIR_TIMEOUT_SECONDS: float = 60.0
@@ -56,6 +81,22 @@ class Settings(BaseSettings):
         if isinstance(value, str) and not value.strip():
             return None
         return value
+
+    @field_validator("ACCESS_TOKEN_EXPIRE")
+    @classmethod
+    def _validate_access_token_expire(cls, value: str) -> str:
+        """Reject malformed or non-positive ``JWT_EXPIRES_IN`` at load time.
+
+        The value is validated but kept in its original string form so the
+        setting continues to round-trip as configured.
+        """
+        parse_expiry_seconds(value)
+        return value
+
+    @property
+    def access_token_expire_seconds(self) -> int:
+        """``JWT_EXPIRES_IN`` expressed as a positive number of seconds."""
+        return parse_expiry_seconds(self.ACCESS_TOKEN_EXPIRE)
 
     @property
     def cors_allow_origins(self) -> list[str]:

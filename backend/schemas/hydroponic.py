@@ -3,7 +3,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field, ConfigDict, AliasChoices, computed_field
 import datetime
 from uuid import UUID, uuid7
-from typing import Generic, TypeVar, List
+from typing import Generic, TypeVar, List, Literal
 
 T = TypeVar("T")
 
@@ -34,48 +34,105 @@ class ResponseList(BaseModel, Generic[T]):
 
 
 class HydroponicDataPlant(BaseModel):
-    moisture1: int = Field(0, ge=0)
-    moisture2: int = Field(0, ge=0)
-    moisture3: int = Field(0, ge=0)
-    moisture4: int = Field(0, ge=0)
-    moisture5: int = Field(0, ge=0)
-    moisture6: int = Field(0, ge=0)
-    flowrate: float = Field(0.0, ge=0.0)
-    total_litres: float = Field(0.0, ge=0.0)
+    """Plant-device sensor payload.
+
+    All measurement fields are REQUIRED even though every value has a valid
+    range starting at zero. The deployed ESP32 plant firmware
+    (``esp/esp32_plant/esp32_plant.ino``) always serialises the complete set,
+    so an omitted key means the device failed to report that measurement. The
+    payload must then be rejected instead of silently becoming ``0``, which
+    would be indistinguishable from a genuine zero reading (audit finding
+    C-4). A measurement that really is ``0`` is still preserved as ``0``.
+    """
+
+    moisture1: int = Field(ge=0)
+    moisture2: int = Field(ge=0)
+    moisture3: int = Field(ge=0)
+    moisture4: int = Field(ge=0)
+    moisture5: int = Field(ge=0)
+    moisture6: int = Field(ge=0)
+    flowrate: float = Field(ge=0.0)
+    total_litres: float = Field(ge=0.0)
     # The ESP32 plant firmware sends this reading under the key `water_level`,
     # while the stored column/field name is `distance_cm`. Accept both keys so
     # the sensor-to-water-surface distance is populated instead of silently
     # defaulting to 0 (see audit finding AB-01).
     distance_cm: float = Field(
-        0.0,
         ge=0.0,
         validation_alias=AliasChoices("distance_cm", "water_level"),
     )
 
 
 class HydroponicDataEnvironment(BaseModel):
-    ph: float = Field(0.0, ge=0.0)
-    tds: float = Field(0.0, ge=0.0)
-    temperature_atas: float = Field(0.0, ge=0.0)
-    temperature_bawah: float = Field(0.0, ge=0.0)
-    humidity_atas: float = Field(0.0, ge=0.0)
-    humidity_bawah: float = Field(0.0, ge=0.0)
+    """Environment-device sensor payload.
+
+    Every field is REQUIRED for the same reason as ``HydroponicDataPlant``:
+    the deployed ESP32 environment firmware always sends the complete set, so
+    a missing key is a device/reporting fault, not a valid ``0``.
+    """
+
+    ph: float = Field(ge=0.0)
+    tds: float = Field(ge=0.0)
+    temperature_atas: float = Field(ge=0.0)
+    temperature_bawah: float = Field(ge=0.0)
+    humidity_atas: float = Field(ge=0.0)
+    humidity_bawah: float = Field(ge=0.0)
 
 
 class HydroponicDataActuator(BaseModel):
+    """Actuator command and/or reported actuator state.
+
+    Unlike the sensor payloads, these fields stay OPTIONAL and default to
+    ``False`` because omission is explicitly supported by the actuator
+    protocol: the ESP8266 actuator firmware only applies keys that are present
+    (it guards every field with ``doc.containsKey(...)`` in
+    ``esp/esp8266_actuator/esp8266_actuator.ino``). Requiring them would break
+    partial control commands without improving data integrity.
+    """
+
     pump_status: bool = Field(False)
     light_status: bool = Field(False)
     automation_status: bool = Field(False)
 
 
 class HydroponicControlResult(HydroponicDataActuator):
+    """Outcome of a manual actuator control request (audit finding C-2).
+
+    ``confirmed`` is ``True`` ONLY when the transport yields a genuine
+    acknowledgement that the physical actuator applied the command. None of the
+    deployed transports provides one: the WebSocket path merely queues the
+    payload for a connected client, and the CoAP path updates an in-process
+    observable resource whose ESP8266 observer has no request/response
+    acknowledgement. ``confirmed`` therefore remains ``False`` and
+    ``delivery_status`` states what could actually be established:
+
+    - ``unavailable``: no eligible actuator transport/receiver is reachable.
+    - ``dispatched``: the command was handed to the transport only.
+    - ``failed``: the transport reported a delivery failure.
+    - ``confirmed``: an actual actuator acknowledgement was received.
+
+    ``dispatched`` must never be presented as successful physical execution.
+    """
+
     command_id: str
     confirmed: bool = False
+    delivery_status: Literal["confirmed", "dispatched", "unavailable", "failed"] = (
+        "dispatched"
+    )
 
 
 class HydroponicAggregate(
     HydroponicDataActuator, HydroponicDataEnvironment, HydroponicDataPlant
 ):
+    """Complete snapshot: plant + environment measurements + actuator state.
+
+    Inheriting the two required-measurement payloads means a snapshot can never
+    be persisted with a missing reading. The aggregator only builds snapshots
+    from two already-validated per-source payloads (see
+    ``HydroponicAggregator._build_snapshot``), so every required field is
+    always present.
+    """
+
     dataid: UUID = Field(default_factory=uuid7)
 
 

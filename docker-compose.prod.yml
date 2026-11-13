@@ -19,8 +19,20 @@
 # database data belong to the other project and must survive routine redeploys.
 services:
   api:
-    image: ksmaiotupnvj/smart-hydroponic-backend:latest
+    # `latest` is a moving tag: two deploys of this same file can run different
+    # code. Pin BACKEND_IMAGE_TAG in `.env` to the release tag published by
+    # .github/workflows/docker-push-backend.yml (`backend-vX.Y.Z`) or to an image
+    # digest when a reproducible deploy or a clean rollback is required. See
+    # docs/backend/deploy_python.md, "Pin image dan reproduksibilitas rilis".
+    image: ksmaiotupnvj/smart-hydroponic-backend:${BACKEND_IMAGE_TAG:-latest}
     container_name: hydroponic-backend
+    # Recover from a crashed process or a host reboot, but leave a container the
+    # operator stopped on purpose stopped. Docker backs off repeated restarts
+    # (doubling the delay up to ~1 minute), so a permanently invalid
+    # configuration does not turn into a tight loop — but it is still an
+    # unhandled failure that monitoring and `docker compose ps` must surface.
+    # A restart policy never replaces alerting.
+    restart: unless-stopped
     env_file:
       - .env
     environment:
@@ -35,6 +47,15 @@ services:
       # reusing a host-oriented URL (e.g. localhost:5434) from .env.
       DATABASE_URL: ""
       COAP_HOST: "0.0.0.0"
+      # The production browser reaches this API through the frontend container's
+      # nginx (`/smart-hydroponic/` -> api:8000, see frontend-vue/nginx.conf), so
+      # requests are same-origin and no CORS header is required. This is
+      # deliberately NOT taken from `.env`'s CORS_ALLOW_ORIGINS, whose default is
+      # the wildcard "*" used for local development. Leave
+      # PROD_CORS_ALLOW_ORIGINS empty for the same-origin deployment; set it to an
+      # explicit comma-separated list of origins only if the API really is called
+      # cross-origin. An empty list means no cross-origin access at all.
+      CORS_ALLOW_ORIGINS: ${PROD_CORS_ALLOW_ORIGINS:-}
     # Bound to loopback on purpose: the host NGINX (site `iot-hidroponik`)
     # terminates TLS and proxies /smart-hydroponic/api/v2/ to 127.0.0.1:8000.
     # Publishing on 0.0.0.0 would expose the API and CoAP port directly.
@@ -50,8 +71,12 @@ services:
       - ksm-aiot-network
 
   client:
-    image: ksmaiotupnvj/smart-hydroponic-frontend:latest
+    # Same reasoning as the api image above: pin FRONTEND_IMAGE_TAG to a release
+    # tag (`frontend-vX.Y.Z`) or a digest instead of relying on the moving
+    # `latest` tag.
+    image: ksmaiotupnvj/smart-hydroponic-frontend:${FRONTEND_IMAGE_TAG:-latest}
     container_name: hydroponic-frontend
+    restart: unless-stopped
     ports:
       - "8080:80"
     depends_on:

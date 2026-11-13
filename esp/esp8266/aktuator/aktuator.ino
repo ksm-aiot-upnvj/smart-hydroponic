@@ -144,7 +144,10 @@ void onMessageCallback(WebsocketsMessage message)
 
   if (error)
   {
-    Serial.println("JSON parsing failed!");
+    Serial.print("JSON parsing failed! error=");
+    Serial.print(error.c_str());
+    Serial.print(", panjang pesan=");
+    Serial.println(command.length());
     return;
   }
 

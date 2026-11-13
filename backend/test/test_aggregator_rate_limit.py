@@ -9,6 +9,30 @@ from unittest.mock import patch, AsyncMock
 
 from utils.aggregator import HydroponicAggregator
 
+# Complete per-source payloads: the aggregator pairs a plant packet with an
+# environment packet and builds a `HydroponicIn` snapshot, whose measurement
+# fields are required (audit finding C-4). Partial dicts would now be rejected.
+PLANT_PAYLOAD = {
+    "moisture1": 10,
+    "moisture2": 11,
+    "moisture3": 12,
+    "moisture4": 13,
+    "moisture5": 14,
+    "moisture6": 15,
+    "flowrate": 1.2,
+    "total_litres": 20.5,
+    "distance_cm": 30.0,
+}
+
+ENVIRONMENT_PAYLOAD = {
+    "ph": 6.2,
+    "tds": 500.0,
+    "temperature_atas": 25.0,
+    "temperature_bawah": 24.0,
+    "humidity_atas": 60.0,
+    "humidity_bawah": 61.0,
+}
+
 
 def _find_call(mock, **expected_kwargs):
     """Return the first recorded call whose kwargs match all expected_kwargs
@@ -109,8 +133,10 @@ async def test_queue_full_logs_critical_severity():
 
     with patch("utils.aggregator.best_effort_log", new_callable=AsyncMock) as mock_log:
         for i in range(5):
-            await agg.gather_data("plant", {"moisture1": i})
-            await agg.gather_data("environment", {"temperature_atas": 20 + i})
+            await agg.gather_data("plant", {**PLANT_PAYLOAD, "moisture1": i})
+            await agg.gather_data(
+                "environment", {**ENVIRONMENT_PAYLOAD, "temperature_atas": 20 + i}
+            )
 
         await asyncio.sleep(0.05)
 
@@ -125,9 +151,9 @@ async def test_stale_pair_timeout_drops_and_logs():
     agg = HydroponicAggregator(min_interval=0.0, timeout=0.05)
 
     with patch("utils.aggregator.best_effort_log", new_callable=AsyncMock) as mock_log:
-        await agg.gather_data("plant", {"moisture1": 1})
+        await agg.gather_data("plant", dict(PLANT_PAYLOAD))
         await asyncio.sleep(0.1)  # exceed pairing timeout
-        await agg.gather_data("environment", {"temperature_atas": 25})
+        await agg.gather_data("environment", dict(ENVIRONMENT_PAYLOAD))
 
         await asyncio.sleep(0.05)
 

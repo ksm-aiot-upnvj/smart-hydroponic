@@ -12,8 +12,22 @@ def _average(values: list[Any]) -> float | None:
 
 
 def build_actuator_control_payload(
-    snapshot: dict[str, Any], active_profile: PlantNutritionProfileOut | None = None
+    snapshot: dict[str, Any],
+    active_profile: PlantNutritionProfileOut | None = None,
+    *,
+    profile_available: bool = True,
 ) -> dict[str, Any]:
+    """Derive the actuator payload for a snapshot.
+
+    ``profile_available`` distinguishes a legitimate absence of an active
+    nutrition profile (``active_profile is None`` with ``profile_available``
+    true — the explicitly configured fallback thresholds are valid) from a
+    failed profile lookup (``profile_available`` false). When the profile could
+    not be retrieved the automatic actuator decision is skipped entirely: the
+    current actuator state is left unchanged and ``automation_degraded`` is
+    reported, because acting on an unverified decision could command an unsafe
+    state (audit finding H-3).
+    """
     moisture_avg = snapshot.get("moisture_avg")
     if moisture_avg is None:
         moisture_avg = _average(
@@ -43,30 +57,46 @@ def build_actuator_control_payload(
     pump_status = current_pump
     light_status = current_light
 
-    if automation_status:
-        if moisture_avg is not None:
-            if active_profile:
-                if moisture_avg < active_profile.moisture_min:
-                    pump_status = True
-                elif moisture_avg > active_profile.moisture_max:
-                    pump_status = False
-            else:
-                if moisture_avg < settings.HYDROPONIC_MOISTURE_THRESHOLD:
-                    pump_status = True
-                else:
-                    pump_status = False
+    automation_degraded = False
+    skip_reason: str | None = None
 
-        if temperature_avg is not None:
-            if active_profile:
-                if temperature_avg < active_profile.temperature_min:
-                    light_status = True
-                elif temperature_avg > active_profile.temperature_max:
-                    light_status = False
-            else:
-                if temperature_avg < settings.HYDROPONIC_TEMPERATURE_THRESHOLD:
-                    light_status = True
+    if automation_status:
+        if not profile_available:
+            # A configured nutrition profile could not be retrieved. Never
+            # substitute the generic thresholds here: the fallback would look
+            # like a normal decision while silently ignoring the operator's
+            # configuration. Fail safe by leaving the actuator state untouched.
+            automation_degraded = True
+            skip_reason = (
+                "active nutrition profile could not be retrieved "
+                "(profile lookup failed); automatic actuator decision skipped"
+            )
+        else:
+            if moisture_avg is not None:
+                if active_profile:
+                    if moisture_avg < active_profile.moisture_min:
+                        pump_status = True
+                    elif moisture_avg > active_profile.moisture_max:
+                        pump_status = False
                 else:
-                    light_status = False
+                    # Legitimate absence of an active profile: these fallback
+                    # thresholds are explicit, valid configuration.
+                    if moisture_avg < settings.HYDROPONIC_MOISTURE_THRESHOLD:
+                        pump_status = True
+                    else:
+                        pump_status = False
+
+            if temperature_avg is not None:
+                if active_profile:
+                    if temperature_avg < active_profile.temperature_min:
+                        light_status = True
+                    elif temperature_avg > active_profile.temperature_max:
+                        light_status = False
+                else:
+                    if temperature_avg < settings.HYDROPONIC_TEMPERATURE_THRESHOLD:
+                        light_status = True
+                    else:
+                        light_status = False
 
     pump_changed = pump_status != current_pump
     light_changed = light_status != current_light
@@ -89,4 +119,6 @@ def build_actuator_control_payload(
         "pump_changed": pump_changed,
         "light_changed": light_changed,
         "change_summary": change_summary,
+        "automation_degraded": automation_degraded,
+        "automation_skip_reason": skip_reason,
     }

@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta, timezone
-import re
 import uuid
 from fastapi import HTTPException
 from authlib.jose import jwt
@@ -25,20 +24,6 @@ class UserService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    def _parse_expiry_seconds(self, expiry_value: str) -> int:
-        value = expiry_value.strip().lower()
-        if value.isdigit():
-            return int(value)
-
-        match = re.fullmatch(r"(\d+)\s*([smhd])", value)
-        if not match:
-            return 3600
-
-        amount = int(match.group(1))
-        unit = match.group(2)
-        multipliers = {"s": 1, "m": 60, "h": 3600, "d": 86400}
-        return amount * multipliers[unit]
-
     async def authenticate_user(self, user_credentials: UserLogin):
         user = None
 
@@ -55,7 +40,7 @@ class UserService:
 
     def create_access_token(self, data: dict):
         now = datetime.now(timezone.utc)
-        expiry_seconds = self._parse_expiry_seconds(settings.ACCESS_TOKEN_EXPIRE)
+        expiry_seconds = settings.access_token_expire_seconds
         payload = TokenPayload(
             **data,
             iat=int(now.timestamp()),

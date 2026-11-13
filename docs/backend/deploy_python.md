@@ -120,6 +120,54 @@ docker compose -f docker-compose.prod.yml up -d
     `database-service-ksm-aiot` yang terpisah, sehingga perintah tersebut dapat
     menghancurkan data tanpa peringatan.
 
+## CORS di Produksi
+
+Produksi **tidak** memakai `CORS_ALLOW_ORIGINS` dari `.env` (nilai contohnya `*`,
+untuk development). `docker-compose.prod.yml` menetapkan variabel itu dari
+`PROD_CORS_ALLOW_ORIGINS`, sehingga wildcard tidak dapat ikut ter-deploy.
+
+Defaultnya kosong, yang berarti **tidak ada** origin lintas-domain yang
+diizinkan. Ini benar untuk deployment normal: browser mengambil dashboard dan
+API dari host yang sama, karena nginx pada container frontend mem-proxy
+`/smart-hydroponic/` ke `api:8000` (lihat `frontend-vue/nginx.conf`).
+
+Isi `PROD_CORS_ALLOW_ORIGINS` dengan daftar origin eksplisit (dipisah koma) hanya
+jika API memang dipanggil dari domain lain, misalnya
+`PROD_CORS_ALLOW_ORIGINS=https://hidroponik.example.com`. Jangan pernah memakai
+`*` di produksi.
+
+## Pin Image dan Reproduksibilitas Rilis
+
+`docker-compose.prod.yml` memakai `${BACKEND_IMAGE_TAG:-latest}` dan
+`${FRONTEND_IMAGE_TAG:-latest}`. Tag `latest` **berpindah setiap rilis**,
+sehingga dua kali deploy dengan `.env` yang sama dapat menjalankan kode yang
+berbeda tanpa perubahan apa pun di repository.
+
+Workflow rilis mem-push dua tag sekaligus ke Docker Hub
+(`.github/workflows/docker-push-backend.yml` dan `docker-push-frontend.yml`):
+
+| Tag | Contoh | Sifat |
+| --- | --- | --- |
+| `latest` | `ksmaiotupnvj/smart-hydroponic-backend:latest` | bergerak setiap rilis |
+| tag rilis | `ksmaiotupnvj/smart-hydroponic-backend:backend-v1.5.0` | tetap |
+
+Untuk deploy yang dapat direproduksi, isi `.env` dengan tag rilis:
+
+```bash
+BACKEND_IMAGE_TAG=backend-v1.5.0
+FRONTEND_IMAGE_TAG=frontend-v1.5.0
+```
+
+Bentuk paling ketat adalah digest image (`repo@sha256:...`, lihat
+`docker image inspect <image> --format '{{index .RepoDigests 0}}'`), karena
+digest tidak dapat ditimpa oleh push berikutnya. Setelah mengubah tag, jalankan
+`docker compose -f docker-compose.prod.yml --env-file .env up -d`.
+
+Rollback tidak otomatis membalik migration: turunkan tag image ke rilis
+sebelumnya, lalu periksa apakah `backend/migrations/versions` pada rilis itu
+masih cocok dengan skema database yang sudah dimigrasikan. Migration hanya
+dijalankan ke depan saat startup.
+
 ## Deployment Reconciliation Checklist
 
 Gunakan daftar ini sebelum dan sesudah mengubah konfigurasi. Semua langkah
@@ -151,31 +199,45 @@ di bawah.
 
 ## Override Entrypoint di Deployment Saat Ini
 
-Deployment di server saat ini memasang file `entrypoint.sh` dari direktori deploy
-(di luar Git, tidak dilacak) ke dalam container:
+Script startup yang **dijalankan container pada deployment produksi saat ini
+bukan** `backend/entrypoint.sh` dari repository. Server memasang salinan
+`entrypoint.sh` miliknya sendiri (di luar Git, tidak dilacak) di atas path image:
 
 ```yaml
 volumes:
   - ./entrypoint.sh:/app/entrypoint.sh:ro
 ```
 
-Artinya script yang benar-benar dijalankan **bukan** `backend/entrypoint.sh` di
-dalam image, melainkan salinan milik server. Keduanya berperilaku setara:
-menunggu database siap, menjalankan `alembic upgrade head`, membuat superuser
-secara idempoten, lalu `exec` proses utama. Perbedaannya hanya cara menunggu
-koneksi database (heredoc DSN vs `python -c` dengan argumen `asyncpg.connect`).
+Di dalam image, `ENTRYPOINT ["/app/entrypoint.sh"]` (lihat `backend/Dockerfile`)
+menunjuk ke `backend/entrypoint.sh` yang ikut ter-copy. Karena mount di atas
+menimpa file itu, script yang benar-benar berjalan adalah salinan milik server.
 
-Risiko perawatan: selama mount tersebut ada, perubahan pada
-`backend/entrypoint.sh` di repository **tidak akan berlaku**. Jika nanti ingin
-memakai entrypoint dari image, hapus dulu mount-nya, pastikan image terbaru
-sudah di-pull, lalu verifikasi ulang lewat health check.
+!!! danger "Konsekuensi yang perlu ditindaklanjuti"
+
+    Perubahan pada `backend/entrypoint.sh` di repository **tidak berlaku** selama
+    mount itu ada. Secara khusus, batas waktu tunggu database
+    (`DB_STARTUP_MAX_ATTEMPTS` / `DB_STARTUP_RETRY_INTERVAL`) dan `exit 1` saat
+    database tetap tidak tersedia adalah perilaku versi repository. Selama
+    salinan server dipakai, belum dapat dipastikan bahwa startup produksi
+    benar-benar berhenti dengan exit code non-zero setelah batas waktu — salinan
+    server bisa saja masih menunggu tanpa batas.
+
+Tindakan yang disarankan untuk operator:
+
+1. Hapus mount `./entrypoint.sh:/app/entrypoint.sh:ro` dari compose di server,
+   atau
+2. sinkronkan isi salinan server agar sama dengan `backend/entrypoint.sh`,
+3. pull image terbaru, lalu
+4. verifikasi lewat `docker compose ... ps` (status health) dan log `api`: harus
+   terlihat baris "Waiting for database (max N attempts, ...)" sebelum
+   "Running migrations...".
 
 !!! note
 
     Pernyataan ini berasal dari pembacaan read-only file di server (compose dan
-    dua script entrypoint). Log startup container belum diperiksa karena akses
-    `docker` memerlukan sudo. Tidak ada perubahan yang dilakukan pada entrypoint
-    di server.
+    dua script entrypoint) pada audit sebelumnya. Log startup container belum
+    diperiksa karena akses `docker` memerlukan sudo. Tidak ada perubahan yang
+    dilakukan pada entrypoint di server.
 
 ## Status Verifikasi Audit
 
@@ -191,14 +253,19 @@ belum diverifikasi.
 - `docker compose -f monitoring/docker-compose.yml config --quiet` → exit `0`.
 - `.env.example` memuat seluruh variabel yang benar-benar dibaca kode: `PG*`,
   `JWT_PRIVATE_KEY`/`JWT_PUBLIC_KEY`, `SUPERUSER_*`, `CORS_ALLOW_ORIGINS`,
-  `COAP_HOST`, `HYDROPONIC_*`, dan `COAP_ACTUATOR_*`.
+  `COAP_HOST`, dan `HYDROPONIC_*`, ditambah variabel khusus Compose
+  (`DB_STARTUP_MAX_ATTEMPTS`, `DB_STARTUP_RETRY_INTERVAL`, `PROD_PGHOST`,
+  `BACKEND_IMAGE_TAG`, `FRONTEND_IMAGE_TAG`, `PROD_CORS_ALLOW_ORIGINS`).
 
 ### Tes lokal yang lulus
 
-- `pytest` (backend, `uv run pytest -q`): 53 lulus tanpa warning, termasuk 8 tes
-  baru untuk `Settings` dan CORS. Sama hasilnya baik dijalankan dari folder
-  `backend` (memakai `backend/pyproject.toml`) maupun dari root repository
-  (memakai `pytest.ini` root).
+- `pytest` (backend): **163 lulus** tanpa warning, termasuk tes
+  untuk health/readiness, skema payload sensor, pipeline snapshot, bootstrap
+  superuser, batas waktu startup, validasi `Settings`, endpoint `/metrics`, dan
+  toleransi migration TimescaleDB.
+  Hasilnya sama baik dijalankan dari folder `backend` (memakai
+  `backend/pyproject.toml`) maupun dari root repository (memakai `pytest.ini`
+  root).
 - `ruff format --check .` dan `ruff check .`: bersih.
 
 ### Konfigurasi server yang teramati (read-only, tanpa perubahan)

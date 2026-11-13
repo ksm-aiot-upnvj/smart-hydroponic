@@ -4,8 +4,31 @@ Revision ID: 1a2b3c4d5e6f
 Revises: c6b1a3f4e2d7
 Create Date: 2026-08-31 10:00:00.000000
 
+Tolerated conditions (audit finding M-7)
+----------------------------------------
+The TimescaleDB calls at the end of :func:`upgrade` and the top of
+:func:`downgrade` are optional: they turn ``logs`` into a hypertable, enable
+compression on it and (un)install the compression policy. The schema change
+itself - the new columns, enums, indexes and the nullable ``userid`` - does not
+depend on them, so a TimescaleDB build that lacks one of these functions must
+not abort the migration.
+
+Only two exception families are tolerated, and only around those calls:
+
+* ``ProgrammingError`` - the function/object does not exist on this server
+  (PostgreSQL classes 42xxx), e.g. an older TimescaleDB without
+  ``create_hypertable``/``add_compression_policy``.
+* ``NotSupportedError`` - the server rejects the feature as unsupported
+  (class 0Axxx), e.g. a build compiled without compression.
+
+Both are logged as warnings at Alembic's own logger, never silently discarded,
+so the operator can see that ``logs`` ended up without a hypertable and/or
+compression policy. Every other error - including a failure of
+``CREATE EXTENSION timescaledb`` or of the ``ALTER TABLE ... timescaledb.compress``
+statement - still propagates and fails the migration loudly.
 """
 
+import logging
 from typing import Sequence, Union
 
 from alembic import op
@@ -16,6 +39,15 @@ revision: str = "1a2b3c4d5e6f"
 down_revision: Union[str, Sequence[str], None] = "c6b1a3f4e2d7"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
+
+logger = logging.getLogger("alembic.runtime.migration")
+
+# Only these two SQLAlchemy error families are tolerated around the optional
+# TimescaleDB calls. See the module docstring for the exact conditions.
+TOLERATED_TIMESCALE_ERRORS = (
+    sa.exc.ProgrammingError,
+    sa.exc.NotSupportedError,
+)
 
 
 EVENT_TYPE_ENUM = postgresql.ENUM(
@@ -108,8 +140,13 @@ def upgrade() -> None:
             op.execute(
                 "SELECT create_hypertable('logs', 'logid', if_not_exists => TRUE);"
             )
-        except Exception:
-            pass
+        except TOLERATED_TIMESCALE_ERRORS as exc:
+            logger.warning(
+                "TimescaleDB create_hypertable('logs') was not applied, so the "
+                "logs table stays a regular table (no time partitioning and no "
+                "compression). Reason: %s",
+                exc,
+            )
 
         op.execute(
             "ALTER TABLE logs SET (timescaledb.compress, timescaledb.compress_orderby = 'logid DESC');"
@@ -118,8 +155,12 @@ def upgrade() -> None:
             op.execute(
                 "SELECT add_compression_policy('logs', compress_after => INTERVAL '7d', if_not_exists => TRUE);"
             )
-        except Exception:
-            pass
+        except TOLERATED_TIMESCALE_ERRORS as exc:
+            logger.warning(
+                "TimescaleDB add_compression_policy('logs') was not applied, so "
+                "old log rows will not be compressed automatically. Reason: %s",
+                exc,
+            )
 
 
 def downgrade() -> None:
@@ -129,8 +170,13 @@ def downgrade() -> None:
     if dialect == "postgresql":
         try:
             op.execute("SELECT remove_compression_policy('logs', if_exists => TRUE);")
-        except Exception:
-            pass
+        except TOLERATED_TIMESCALE_ERRORS as exc:
+            logger.warning(
+                "TimescaleDB remove_compression_policy('logs') was not applied; "
+                "a compression policy may still exist on the logs hypertable. "
+                "Reason: %s",
+                exc,
+            )
         op.execute("ALTER TABLE logs SET (timescaledb.compress = false)")
 
     with op.batch_alter_table("logs", schema=None) as batch_op:

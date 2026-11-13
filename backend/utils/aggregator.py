@@ -7,14 +7,35 @@ from typing import Any
 from uuid import uuid7
 
 from config.config import settings
-from schemas import HydroponicIn
+from schemas import HydroponicIn, PlantNutritionProfileOut
 from utils.log_helpers import best_effort_log
+from utils.metrics import AGGREGATOR_DROPS
 
 logger = logging.getLogger(__name__)
 
 _PROFILE_CACHE_TTL = 30.0
+# How long a failed profile lookup blocks further attempts. Short enough that a
+# transient database outage recovers quickly, long enough not to hammer a
+# database that is known to be down.
+_PROFILE_FAILURE_RETRY_INTERVAL = 5.0
 _RING_BUFFER_SIZE = 256
 _PROCESS_QUEUE_MAXSIZE = 4096
+
+
+@dataclass(frozen=True)
+class ProfileResolution:
+    """Outcome of resolving the active nutrition profile (audit finding H-3).
+
+    ``available`` is ``False`` only when the profile could not be *determined*
+    because the lookup raised (for example the database was unreachable). A
+    legitimate "no active profile configured" result is ``profile is None``
+    with ``available`` true — the explicitly configured fallback thresholds are
+    valid in that case. Automation must be skipped, not silently retargeted to
+    generic thresholds, when ``available`` is false.
+    """
+
+    profile: PlantNutritionProfileOut | None = None
+    available: bool = True
 
 
 @dataclass(order=True)
@@ -57,8 +78,9 @@ class HydroponicAggregator:
 
         self.last_received: dict[str, float] = {}
 
-        self._cached_profile = None
+        self._cached_profile: PlantNutritionProfileOut | None = None
         self._profile_cached_at: float = 0.0
+        self._profile_failure_at: float = 0.0
         self._profile_lock: asyncio.Lock = asyncio.Lock()
 
         self.process_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(
@@ -111,15 +133,31 @@ class HydroponicAggregator:
     # Nutrition profile cache
     # ------------------------------------------------------------------
 
-    async def get_cached_profile(self):
+    async def get_cached_profile(self) -> ProfileResolution:
+        """Resolve the active nutrition profile, distinguishing absence from
+        failure (audit finding H-3).
+
+        A successful lookup (including a legitimate "no active profile") is
+        cached for ``_PROFILE_CACHE_TTL``. A failed lookup is never cached as if
+        it were an absence: it is reported with ``available=False`` and only a
+        short negative cache suppresses immediate retries, so a transient
+        outage neither poisons the cache nor prevents recovery.
+        """
         now = time.monotonic()
         async with self._profile_lock:
-            if (now - self._profile_cached_at) < _PROFILE_CACHE_TTL and (
-                self._cached_profile is not None or self._profile_cached_at > 0
+            if (
+                self._profile_cached_at > 0
+                and (now - self._profile_cached_at) < _PROFILE_CACHE_TTL
             ):
-                return self._cached_profile
+                return ProfileResolution(profile=self._cached_profile, available=True)
+            if (
+                self._profile_failure_at > 0
+                and (now - self._profile_failure_at) < _PROFILE_FAILURE_RETRY_INTERVAL
+            ):
+                return ProfileResolution(profile=None, available=False)
 
-        profile = None
+        profile: PlantNutritionProfileOut | None = None
+        error: Exception | None = None
         try:
             from utils.deps import get_db_session
             from services.nutrition_service import NutritionService
@@ -127,17 +165,25 @@ class HydroponicAggregator:
             async with get_db_session() as session:
                 service = NutritionService(session)
                 profile = await service.get_active_profile()
-        except Exception:
+        except Exception as exc:
+            error = exc
             logger.exception("[Aggregator] Failed to refresh nutrition profile cache.")
 
         async with self._profile_lock:
-            if profile is not None:
-                self._cached_profile = profile
+            if error is not None:
+                # Do not touch ``_profile_cached_at``: a failure is not a
+                # resolution and must never look like a legitimate absence.
+                self._profile_failure_at = time.monotonic()
+                return ProfileResolution(profile=None, available=False)
+
+            self._cached_profile = profile
             self._profile_cached_at = time.monotonic()
-            return self._cached_profile
+            self._profile_failure_at = 0.0
+            return ProfileResolution(profile=profile, available=True)
 
     def invalidate_profile_cache(self) -> None:
         self._profile_cached_at = 0.0
+        self._profile_failure_at = 0.0
 
     # ------------------------------------------------------------------
     # Drop-log throttling helper
@@ -161,6 +207,7 @@ class HydroponicAggregator:
     async def gather_data(self, source: str, data: dict) -> bool:
         if source not in self._buffers:
             logger.warning("[Aggregator] Unknown source '%s'; dropping packet.", source)
+            AGGREGATOR_DROPS.labels(reason="unknown_source").inc()
             return False
 
         now = time.monotonic()
@@ -175,6 +222,7 @@ class HydroponicAggregator:
                         delta,
                         self.min_interval,
                     )
+                    AGGREGATOR_DROPS.labels(reason="rate_limited").inc()
                     if self._should_log_drop(f"rate_limit:{source}"):
                         asyncio.create_task(
                             best_effort_log(
@@ -202,6 +250,7 @@ class HydroponicAggregator:
                     source,
                     age,
                 )
+                AGGREGATOR_DROPS.labels(reason="ring_full").inc()
                 if self._should_log_drop(f"ring_full:{source}"):
                     asyncio.create_task(
                         best_effort_log(
@@ -278,6 +327,7 @@ class HydroponicAggregator:
                 )
 
         for source, age in stale_events:
+            AGGREGATOR_DROPS.labels(reason="stale_pair").inc()
             if self._should_log_drop(f"stale_pair:{source}"):
                 asyncio.create_task(
                     best_effort_log(
@@ -334,6 +384,7 @@ class HydroponicAggregator:
                     flush_events.append((source, count_before, age))
 
         for source, count, age in flush_events:
+            AGGREGATOR_DROPS.labels(reason="partial_flush").inc(count)
             if self._should_log_drop(f"partial_flush:{source}"):
                 asyncio.create_task(
                     best_effort_log(
@@ -356,6 +407,7 @@ class HydroponicAggregator:
             self.process_queue.put_nowait(payload)
         except asyncio.QueueFull:
             qsize = self.process_queue.qsize()
+            AGGREGATOR_DROPS.labels(reason="queue_full").inc()
             logger.error(
                 "[Aggregator] Process queue full (size=%d); snapshot dropped. "
                 "DB or broadcast worker is unable to keep up. "

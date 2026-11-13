@@ -24,6 +24,8 @@ const unsigned long OBSERVE_REFRESH_INTERVAL =
 const unsigned long SERVER_WATCHDOG_TIMEOUT =
     90000; // Reset observe jika server diam > 90s (deteksi server
            // redeploy/restart)
+const unsigned long OBSERVE_REJECT_RETRY_INTERVAL =
+    30000; // Cooldown re-register setelah server menolak Observe
 
 // ============================ GLOBALS ============================
 struct ActuatorState {
@@ -38,6 +40,11 @@ bool coapStarted = false;
 unsigned long lastWifiAttempt = 0;
 unsigned long lastObserveRefresh = 0;
 unsigned long lastServerActivity = 0;
+// Diisi callback_response saat server menjawab 4.xx/5.xx; loop memakainya untuk
+// mendaftar ulang Observe dengan cooldown supaya perangkat tidak diam tanpa
+// notifikasi tanpa jejak.
+bool observeRejected = false;
+unsigned long lastObserveRejectRetry = 0;
 
 // ============================ COAP ============================
 WiFiUDP udp;
@@ -123,6 +130,19 @@ void loop() {
   // Refresh observe periodically
   if (wifiConnected && coapStarted &&
       (now - lastObserveRefresh >= OBSERVE_REFRESH_INTERVAL)) {
+    registerObserve();
+    lastObserveRefresh = now;
+  }
+
+  // Server menolak/menggagalkan Observe (4.xx/5.xx). Tanpa ini perangkat diam
+  // tanpa notifikasi sampai refresh berkala 1 jam berikutnya. Cooldown
+  // mencegah lingkaran re-register tanpa henti.
+  if (observeRejected && wifiConnected && coapStarted &&
+      (now - lastObserveRejectRetry >= OBSERVE_REJECT_RETRY_INTERVAL)) {
+    observeRejected = false;
+    lastObserveRejectRetry = now;
+    Serial.println("\n[OBSERVE] Server menolak permintaan sebelumnya. "
+                   "Mendaftarkan ulang Observe...");
     registerObserve();
     lastObserveRefresh = now;
   }
@@ -266,18 +286,56 @@ void registerObserve() {
   Serial.println("[OBSERVE] Paket pendaftaran terkirim!");
 }
 
+// ============================ COAP CODE DIAGNOSTIC ============================
+// Cetak kode respons CoAP sebagai "C.DD" beserta verdict singkat. Sebelumnya
+// kode ini diabaikan, sehingga jawaban 4.xx/5.xx dari server terlihat sama
+// seperti notifikasi state yang normal.
+void printCoapCode(uint8_t code) {
+  uint8_t codeClass = code >> 5;
+  uint8_t detail = code & 0x1F;
+
+  Serial.print("Kode respons: ");
+  Serial.print(codeClass);
+  Serial.print('.');
+  if (detail < 10)
+    Serial.print('0');
+  Serial.print(detail);
+
+  if (code == 0)
+    Serial.println(" (empty - ACK tanpa payload)");
+  else if (codeClass == 2)
+    Serial.println(" (sukses)");
+  else if (codeClass == 4)
+    Serial.println(" (ditolak server)");
+  else if (codeClass == 5)
+    Serial.println(" (error di server)");
+  else
+    Serial.println(" (tidak terduga)");
+}
+
 // ============================ COAP CALLBACK ============================
 void callback_response(CoapPacket &packet, IPAddress ip, int port) {
   lastServerActivity =
       millis(); // Reset Watchdog timer saat ada aktivitas dari server
   Serial.println("\n--- [INCOMING] ---");
   Serial.println("Menerima pesan dari server!");
+  printCoapCode(packet.code);
 
   if (packet.type == COAP_CON) {
     Serial.println(
         "Tipe paket: Confirmable. Auto-ACK dikirim oleh library (Empty ACK).");
     // coap.sendResponse(ip, port, packet.messageid); // Dihapus karena sudah
     // auto-ACK di library
+  }
+
+  // 4.xx/5.xx berarti server tidak melayani permintaan. Payload-nya adalah
+  // pesan error, bukan state aktuator, jadi jangan ditafsirkan sebagai state.
+  if (packet.code >= 0x80) {
+    Serial.println(
+        "Server tidak melayani permintaan; state aktuator TIDAK diubah.");
+    observeRejected = true;
+    Serial.println("------------------");
+    return;
   }
 
   if (packet.payloadlen > 0) {
@@ -313,7 +371,10 @@ void callback_response(CoapPacket &packet, IPAddress ip, int port) {
         Serial.println("State tidak berubah.");
       }
     } else {
-      Serial.println("Gagal parsing JSON!");
+      Serial.print("Gagal parsing JSON! error=");
+      Serial.print(error.c_str());
+      Serial.print(", panjang payload=");
+      Serial.println(packet.payloadlen);
     }
   } else {
     Serial.println("Payload kosong!");

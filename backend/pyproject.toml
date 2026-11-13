@@ -20,6 +20,7 @@ dependencies = [
     "pydantic[email]>=2.12.5",
     "alembic-postgresql-enum>=1.8.0",
     "colorlog>=6.11.0",
+    "prometheus-client>=0.26.0",
 ]
 
 [dependency-groups]

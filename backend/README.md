@@ -70,7 +70,7 @@ Backend dianggap berjalan jika:
 
 1. Terminal menampilkan server FastAPI aktif.
 2. Endpoint `/health` mengembalikan status sehat.
-3. Endpoint `/db-test` dapat mengembalikan hasil query sederhana jika database sudah benar.
+3. Endpoint `/health/ready` mengembalikan `200` dengan `{"checks": {"database": "ok"}}` jika database sudah benar, atau `503` jika database tidak dapat dijangkau.
 
 ## Simulasi Perangkat
 

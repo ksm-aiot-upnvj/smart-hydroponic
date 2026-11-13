@@ -108,7 +108,7 @@ Migration membuat struktur tabel sesuai kebutuhan aplikasi.
 
 ## Cara Mengecek Berhasil
 
-1. Backend dapat menjalankan endpoint `/db-test`.
+1. Endpoint `/health/ready` mengembalikan `200` (`{"checks": {"database": "ok"}}`). Endpoint ini melakukan `SELECT 1` ke database yang sama dengan yang dipakai aplikasi, jadi ia menggantikan probe `/db-test` lama yang tanpa autentikasi dan kini sudah dihapus.
 2. Migration selesai tanpa error.
 3. Database berisi tabel yang dibuat oleh migration.
 

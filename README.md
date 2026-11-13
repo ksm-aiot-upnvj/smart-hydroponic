@@ -69,7 +69,11 @@ Cara termudah untuk mencoba sistem adalah memakai Docker Compose dari root repos
 4. Buka layanan berikut:
 
    - Backend lokal: `http://localhost:8000`
-   - Health check lokal: `http://localhost:8000/health`
+   - Health check lokal: `http://localhost:8000/health` (liveness) dan
+     `http://localhost:8000/health/ready` (readiness; `503` bila database tidak
+     dapat dijangkau)
+   - Metrik Prometheus aplikasi: `http://localhost:8000/metrics`
+     (lihat [troubleshooting](docs/troubleshooting.md), bagian "Metrik dan Alert")
    - Frontend: `http://localhost:8080`
 
 Jika ini pertama kali membaca proyek, mulai dari [docs/getting-started.md](docs/getting-started.md) agar setiap langkah punya penjelasan dan cara mengecek hasilnya.

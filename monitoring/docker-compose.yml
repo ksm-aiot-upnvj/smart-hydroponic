@@ -13,9 +13,15 @@ services:
     container_name: prometheus
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
       - prometheus-data:/prometheus
     ports:
       - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    # Resolves `host.docker.internal` to the Docker host gateway on Linux too
+    # (Docker Desktop provides it automatically). Required to scrape the
+    # host-published backend `/metrics` endpoint — see monitoring/prometheus.yml.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:9090/-/healthy || exit 1"]
       interval: 30s
