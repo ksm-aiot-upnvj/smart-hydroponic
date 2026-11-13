@@ -2,6 +2,52 @@
 
 <!-- version list -->
 
+## v1.5.1 (2026-11-13)
+
+### Bug Fixes
+
+- Accept water_level as an alias for distance_cm
+  ([`3482c6c`](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/3482c6c4bb8124d445174d227bb6e1857b806d67))
+
+- Annotate Boolean actuator columns as bool
+  ([`def2cce`](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/def2cce7727fd88e5183dec0acf92eae7acd5ef5))
+
+- Centralize password hashing in a security utility
+  ([`a4cf2fa`](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/a4cf2fa268b0b0edcedf95e25343a47df2f308d6))
+
+- Make nutrition_id required on the profile output schema
+  ([`9e0030c`](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/9e0030c64e93e9e6b598ec34a7231dc7a018824b))
+
+- Read JWT key files lazily instead of at import
+  ([`10aabe7`](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/10aabe77df57993c69d8058a4abc31588b08d0c4))
+
+- Rebuild DATABASE_URL from parts and gate CORS credentials
+  ([`60ee2f3`](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/60ee2f370d47d32ca7de8e0d9e4a209e627106a9))
+
+- Return the log delete response with the detail field
+  ([`4eeae88`](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/4eeae88cad45b333e28cc23ecb08c6802ac662f8))
+
+- Source the CoAP actuator client and tuning from Settings
+  ([`b98b5fe`](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/b98b5fe309f94170f08d76875b6e5188c016a78c))
+
+- Type the actuator profile as PlantNutritionProfileOut
+  ([`886893c`](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/886893c9fd9bbb42635e08b88e912c72cd74180f))
+
+- **audit**: Harden actuator delivery and service observability
+  ([`d1c8754`](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/d1c87545087fc322ddb800211c33e71c71a39411))
+
+### Documentation
+
+- Document the CoAP instance registry limitation
+  ([`f49d866`](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/f49d866d3b4a3b71df57a0f355ce685a35776f1f))
+
+- Document the test workflow, root pytest config and JWT key resolution
+  ([`9e2ab88`](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/9e2ab888f8d8926f1a8a9ffddb28a8bd88e9f0d2))
+
+- Standardize on the repository-root .env and backend commands
+  ([`7609036`](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/7609036de2e16f3e8b3a6346cf0dc79fdd58de55))
+
+
 ## v1.5.0 (2026-10-20)
 
 ### Bug Fixes
