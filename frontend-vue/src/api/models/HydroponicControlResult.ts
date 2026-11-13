@@ -8,4 +8,5 @@ export type HydroponicControlResult = {
   automation_status?: boolean;
   command_id: string;
   confirmed?: boolean;
+  delivery_status?: "confirmed" | "dispatched" | "unavailable" | "failed";
 };

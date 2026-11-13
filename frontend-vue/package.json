@@ -8,6 +8,7 @@
     "type-check": "vue-tsc -b",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
+    "test": "node --test \"tests/**/*.test.ts\"",
     "generate-api": "npx openapi-typescript-codegen --input http://127.0.0.1:8000/smart-hydroponic/api/v2/openapi.json --output src/api --client axios"
   },
   "dependencies": {

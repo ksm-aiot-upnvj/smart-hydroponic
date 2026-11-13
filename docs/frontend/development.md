@@ -17,7 +17,9 @@ Bagian ini menjelaskan cara menjalankan dashboard Smart Hydroponic untuk kebutuh
 - `src/components/`: komponen UI yang dipakai ulang.
 - `src/router/`: konfigurasi route halaman.
 - `src/api/`: API client hasil generate dari OpenAPI backend.
+- `src/http.ts`: konfigurasi HTTP client (timeout). Bukan file hasil generate.
 - `src/auth.ts`: helper autentikasi.
+- `tests/`: tes frontend (dijalankan dengan `npm test`).
 
 ## Menjalankan Frontend
 
@@ -63,6 +65,33 @@ Setelah generate, periksa kembali `src/api/core/OpenAPI.ts` karena seluruh folde
 
 1. `BASE` harus kembali ke `/smart-hydroponic/api/v2` (harus sama dengan `root_path` di `backend/main.py`).
 2. `VERSION` harus disamakan dengan versi di `backend/pyproject.toml` (dan `frontend-vue/package.json`).
+
+## Timeout HTTP
+
+API client hasil generate di `src/api/core/request.ts` memanggil axios tanpa `timeout`, sehingga
+server yang menerima koneksi tetapi tidak pernah menjawab akan membuat request dan indikator loading
+di UI menggantung tanpa batas.
+
+Timeout dipasang di `src/http.ts` (bukan file generate, sehingga tidak hilang saat `npm run generate-api`)
+dan diterapkan lewat `axios.defaults.timeout` pada instance axios yang dipakai API client. Fungsi itu
+dipanggil sekali dari `src/main.ts` sebelum aplikasi di-mount.
+
+Nilai default adalah `15000` milidetik (15 detik) dan dapat diubah lewat variabel `VITE_API_TIMEOUT_MS`:
+
+```bash
+VITE_API_TIMEOUT_MS=25000 npm run dev
+```
+
+Nilai yang kosong atau tidak valid akan memakai default dan menulis peringatan di console browser.
+
+## Tes Frontend
+
+```bash
+npm test
+```
+
+Perintah ini memakai test runner bawaan Node.js (`node --test`), jadi tidak ada dependency tambahan.
+Tes berada di folder `tests/`.
 
 ## Git Hooks
 

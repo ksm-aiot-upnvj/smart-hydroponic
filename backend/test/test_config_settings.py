@@ -20,7 +20,7 @@ from pydantic import ValidationError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from config.config import Settings
+from config.config import Settings, parse_expiry_seconds
 from main import app
 
 # Values required by Settings that this module does not exercise.
@@ -131,3 +131,39 @@ def test_wildcard_origin_disables_credentials():
 
     assert response.headers.get("access-control-allow-origin") == "*"
     assert "access-control-allow-credentials" not in response.headers
+
+
+# ---------------------------------------------------------------------------
+# JWT expiry (M-4): malformed configuration must be rejected, never defaulted.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_seconds"),
+    [
+        ("3600", 3600),
+        ("45s", 45),
+        ("30m", 1800),
+        ("1h", 3600),
+        ("2d", 172800),
+        ("  15m  ", 900),
+        ("1H", 3600),
+    ],
+)
+def test_valid_expiry_values_are_parsed(value, expected_seconds):
+    assert parse_expiry_seconds(value) == expected_seconds
+    assert make_settings(JWT_EXPIRES_IN=value).access_token_expire_seconds == (
+        expected_seconds
+    )
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["", "   ", "abc", "10x", "-5", "0", "0h", "1.5h", "h", "1h30m", "3600s extra"],
+)
+def test_invalid_expiry_values_are_rejected(value):
+    with pytest.raises(ValueError):
+        parse_expiry_seconds(value)
+
+    with pytest.raises(ValidationError):
+        make_settings(JWT_EXPIRES_IN=value)

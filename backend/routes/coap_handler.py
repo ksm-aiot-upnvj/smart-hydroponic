@@ -11,6 +11,7 @@ from schemas import (
 )
 from utils.aggregator import HydroponicAggregator
 from utils.log_helpers import best_effort_log
+from utils.metrics import SENSOR_REJECTED
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,7 @@ class HydroponicCoAPResource(resource.ObservableResource):
             try:
                 payload = request.payload.decode("utf-8")
             except UnicodeDecodeError as exc:
+                SENSOR_REJECTED.labels(role=self.role, reason="non_utf8").inc()
                 logger.warning(
                     "[CoAP] Non-UTF-8 payload from %s/%s: %s",
                     client_ip,
@@ -103,6 +105,7 @@ class HydroponicCoAPResource(resource.ObservableResource):
             try:
                 data_json = json.loads(payload)
             except json.JSONDecodeError as exc:
+                SENSOR_REJECTED.labels(role=self.role, reason="invalid_json").inc()
                 logger.warning(
                     "[CoAP] Invalid JSON from %s/%s: %s",
                     client_ip,
@@ -132,6 +135,7 @@ class HydroponicCoAPResource(resource.ObservableResource):
             try:
                 data = self.validator.model_validate(data_json)
             except Exception as exc:
+                SENSOR_REJECTED.labels(role=self.role, reason="schema_validation").inc()
                 logger.warning(
                     "[CoAP] Schema validation failed for %s/%s: %s. Payload: %s",
                     client_ip,

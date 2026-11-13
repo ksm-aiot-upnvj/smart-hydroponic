@@ -121,7 +121,10 @@
                 <p
                   v-if="controlStatusMessage"
                   class="control-status"
-                  :class="{ 'is-error': controlStatusType === 'error' }"
+                  :class="{
+                    'is-error': controlStatusType === 'error',
+                    'is-warning': controlStatusType === 'warning',
+                  }"
                 >
                   {{ controlStatusMessage }}
                 </p>
@@ -145,6 +148,7 @@ import { NutritionService, type PlantNutritionProfileOut } from "../api";
 // Mengambil model data dan service
 import {
   HydroponicsService,
+  type HydroponicControlResult,
   type HydroponicDataActuator,
   type HydroponicOut,
   type ResponseList_HydroponicOut_,
@@ -347,7 +351,7 @@ type ControlType = keyof typeof controls;
 
 const isControlUpdating = ref(false);
 const controlStatusMessage = ref("");
-const controlStatusType = ref<"success" | "error" | "">("");
+const controlStatusType = ref<"success" | "warning" | "error" | "">("");
 const lastManualControlTime = ref<number>(0);
 const MANUAL_CONTROL_COOLDOWN_MS = 40000;
 
@@ -373,6 +377,43 @@ const getActuatorPayload = (): HydroponicDataActuator => ({
   light_status: controls.light,
 });
 
+// Never report success when the backend could not establish physical
+// execution (audit finding C-2). Only `confirmed` is a real success; a
+// `dispatched` command is shown as a warning because execution is unverified.
+const describeDeliveryStatus = (
+  status: HydroponicControlResult["delivery_status"],
+): { message: string; type: "success" | "warning" | "error" } => {
+  switch (status) {
+    case "confirmed":
+      return {
+        message: "Perintah dikonfirmasi oleh aktuator.",
+        type: "success",
+      };
+    case "dispatched":
+      return {
+        message:
+          "Perintah terkirim ke aktuator, eksekusi fisik belum terkonfirmasi.",
+        type: "warning",
+      };
+    case "unavailable":
+      return {
+        message: "Perintah tidak terkirim: tidak ada aktuator yang terhubung.",
+        type: "error",
+      };
+    case "failed":
+      return {
+        message: "Pengiriman perintah gagal. Coba lagi.",
+        type: "error",
+      };
+    default:
+      return {
+        message:
+          "Status pengiriman perintah tidak diketahui. Periksa aktuator secara manual.",
+        type: "warning",
+      };
+  }
+};
+
 const toggleControl = async (type: ControlType) => {
   if (isControlUpdating.value) return;
 
@@ -392,10 +433,22 @@ const toggleControl = async (type: ControlType) => {
       getActuatorPayload(),
       "coap",
     );
-    mapLatestControlState(response);
-    lastManualControlTime.value = Date.now();
-    controlStatusMessage.value = "Kontrol berhasil diperbarui.";
-    controlStatusType.value = "success";
+
+    const outcome = describeDeliveryStatus(response.delivery_status);
+
+    if (outcome.type === "error") {
+      // The command was not delivered: revert the optimistic toggle so the
+      // panel never shows a state the actuator did not receive.
+      controls.automation = previousState.automation;
+      controls.pump = previousState.pump;
+      controls.light = previousState.light;
+    } else {
+      mapLatestControlState(response);
+      lastManualControlTime.value = Date.now();
+    }
+
+    controlStatusMessage.value = outcome.message;
+    controlStatusType.value = outcome.type;
   } catch (error) {
     controls.automation = previousState.automation;
     controls.pump = previousState.pump;
@@ -647,6 +700,9 @@ onUnmounted(() => {
 }
 .control-status.is-error {
   color: #dc2626;
+}
+.control-status.is-warning {
+  color: #d97706;
 }
 
 /* TOGGLE SWITCH STYLE */

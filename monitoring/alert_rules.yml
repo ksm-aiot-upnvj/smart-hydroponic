@@ -1,0 +1,105 @@
+# Prometheus alert rules for the Smart Hydroponic backend (audit finding M-1).
+#
+# Scope: only *failure* conditions that the Fail Fast / Fail Loud audit flagged
+# as previously visible only in container logs. Every rule reads a
+# low-cardinality counter/gauge exposed by backend/utils/metrics.py.
+#
+# There is no Alertmanager in this repository, so these rules are evaluated and
+# shown in the Prometheus UI (http://localhost:9090/alerts) but not delivered
+# anywhere. Add an Alertmanager only together with a real delivery
+# configuration; do not add a placeholder one.
+groups:
+  - name: hydroponic-critical
+    rules:
+      - alert: HydroponicBackendDown
+        expr: up{job="hydroponic_backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backend scrape target is unreachable"
+          description: >-
+            Prometheus cannot scrape /metrics on the backend for 2 minutes. The
+            container may be down, crash-looping, or unreachable from the
+            monitoring network.
+
+      - alert: HydroponicDatabaseUnavailable
+        expr: hydroponic_database_ready == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Readiness probe cannot reach PostgreSQL"
+          description: >-
+            /health/ready has failed its SELECT 1 probe. Requests that need the
+            database are failing and sensor snapshots will not be persisted.
+
+      - alert: HydroponicSnapshotPersistenceFailing
+        expr: increase(hydroponic_snapshot_persistence_total{result="failure"}[10m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Sensor snapshots are being lost"
+          description: >-
+            At least one snapshot exhausted all DB persistence retries in the
+            last 10 minutes and was dropped. Sensor measurements are being lost.
+
+      - alert: HydroponicQueueOverflow
+        expr: increase(hydroponic_aggregator_drops_total{reason="queue_full"}[10m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Aggregator process queue overflowed"
+          description: >-
+            The pipeline could not keep up with ingestion and dropped whole
+            snapshots from the process queue.
+
+  - name: hydroponic-warning
+    rules:
+      - alert: HydroponicAutomationSuspended
+        expr: hydroponic_automation_degraded == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Automatic actuator control is suspended"
+          description: >-
+            The nutrition profile could not be resolved, so automatic actuator
+            decisions are suspended and actuator state is left unchanged.
+
+      - alert: HydroponicSensorPayloadsRejected
+        expr: rate(hydroponic_sensor_payload_rejected_total[10m]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sensor payloads are being rejected"
+          description: >-
+            More than one payload per 10 minutes is rejected before ingestion.
+            Check device firmware payloads against the expected schema.
+
+      - alert: HydroponicBroadcastFailures
+        expr: increase(hydroponic_broadcast_failures_total[10m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Real-time WebSocket broadcasts are failing"
+          description: >-
+            Messages could not be delivered to one or more connected clients
+            (send-queue overflow or enqueue error). Dashboards may show stale
+            data.
+
+      - alert: HydroponicActuatorCommandNotDelivered
+        expr: >-
+          increase(hydroponic_actuator_commands_total{outcome=~"unavailable|failed"}[10m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Manual actuator commands were not delivered"
+          description: >-
+            Dashboard control requests could not be handed to any connected
+            actuator. Verify that the actuator device is online.

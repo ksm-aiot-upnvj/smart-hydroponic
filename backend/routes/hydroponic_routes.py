@@ -27,10 +27,13 @@ from uuid import uuid4
 from utils.manager import manager
 from utils.aggregator import aggregator
 from utils.deps import require_role
+from utils.log_helpers import best_effort_log
+from utils.metrics import ACTUATOR_COMMANDS, SENSOR_REJECTED
 from utils.converter import _parse_datetime_input
 from fastapi.responses import HTMLResponse
 from utils.templates import templates
 from datetime import timedelta
+import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
@@ -59,6 +62,29 @@ DEVICE_CONFIG = {
         "model": None,
     },
 }
+
+
+def _validation_error_summary(exc: Exception) -> list[str]:
+    """Summarise a Pydantic validation error as ``<field>: <error type>``.
+
+    Only the field/alias name and the error kind are extracted (never the
+    offending values), so the anomaly log can describe *what* was rejected
+    without dumping raw measurement payloads. Non-Pydantic exceptions yield an
+    empty list.
+    """
+    errors = getattr(exc, "errors", None)
+    if not callable(errors):
+        return []
+    try:
+        return sorted(
+            {
+                (".".join(str(part) for part in error.get("loc", ())) or "<payload>")
+                + f": {error.get('type', 'invalid')}"
+                for error in errors()
+            }
+        )
+    except Exception:
+        return []
 
 
 @router.get(
@@ -203,24 +229,50 @@ async def control_hydroponic_actuators(
         aggregator.update_actuator_state(command_payload)
 
         actuator_res = HydroponicCoAPResource._instances.get("actuator")
-        if actuator_res:
+        if actuator_res is None:
+            # No live CoAP actuator resource in this process: the command was
+            # recorded but cannot reach any device.
+            logger.warning(
+                "[Control] CoAP actuator resource is not registered; "
+                "command %s was not delivered.",
+                command_id,
+            )
+            delivery_status = "unavailable"
+        else:
+            # A CoAP Observe notification pushes the payload to the transport;
+            # it is NOT proof that the physical actuator executed the command.
+            # The result is therefore reported as ``dispatched`` (some observer
+            # received the notification) or ``unavailable`` (no observer), and
+            # never as ``confirmed``.
+            has_observers = bool(getattr(actuator_res, "_observations", None))
             actuator_res.latest_state = json.dumps(command_payload).encode("utf-8")
             actuator_res.updated_state()
-            logging.getLogger(__name__).info(
-                f"[CoAP Debug] Sending Observe notification to actuator: {command_payload}"
-            )
-            confirmed = True
-        else:
-            confirmed = False
+            if has_observers:
+                delivery_status = "dispatched"
+                logger.info(
+                    "[Control] CoAP Observe notification pushed to actuator "
+                    "(command_id=%s, observers=%s).",
+                    command_id,
+                    len(actuator_res._observations),
+                )
+            else:
+                delivery_status = "unavailable"
+                logger.warning(
+                    "[Control] No CoAP observer registered on 'actuator'; "
+                    "command %s was not delivered.",
+                    command_id,
+                )
 
+        ACTUATOR_COMMANDS.labels(transport="coap", outcome=delivery_status).inc()
         return HydroponicControlResult(
             **command_payload,
             command_id=command_id,
-            confirmed=confirmed,
+            confirmed=False,
+            delivery_status=delivery_status,
         )
 
     logger.info(f"Received control command: {command_payload}")
-    await manager.send_to_room(
+    broadcast = await manager.send_to_room(
         room="hydroponics",
         role="actuator",
         message={
@@ -230,10 +282,41 @@ async def control_hydroponic_actuators(
         },
     )
 
+    if not broadcast.has_clients:
+        delivery_status = "unavailable"
+        logger.warning(
+            "[Control] No actuator WebSocket client connected; command %s "
+            "was not delivered.",
+            command_id,
+        )
+    elif broadcast.queued == 0:
+        delivery_status = "failed"
+        logger.error(
+            "[Control] WebSocket delivery failed for every eligible actuator "
+            "client (command_id=%s, eligible=%d, dropped=%d).",
+            command_id,
+            broadcast.eligible,
+            broadcast.dropped,
+        )
+    else:
+        # A queued message only proves the payload was handed to a client's
+        # sender task; it is not an acknowledgement of physical execution.
+        delivery_status = "dispatched"
+        if broadcast.dropped:
+            logger.warning(
+                "[Control] WebSocket delivery partially failed "
+                "(command_id=%s, queued=%d, dropped=%d).",
+                command_id,
+                broadcast.queued,
+                broadcast.dropped,
+            )
+
+    ACTUATOR_COMMANDS.labels(transport="websocket", outcome=delivery_status).inc()
     return HydroponicControlResult(
         **command_payload,
         command_id=command_id,
-        confirmed=True,
+        confirmed=False,
+        delivery_status=delivery_status,
     )
 
 
@@ -301,6 +384,7 @@ async def hydroponic_data_websocket(device_type: str, websocket: WebSocket):
                 else:
                     continue
             except Exception:
+                SENSOR_REJECTED.labels(role=role, reason="invalid_frame").inc()
                 logger.warning(
                     "[WS %s] Invalid frame from %s; sending error ack.",
                     session_id,
@@ -321,12 +405,37 @@ async def hydroponic_data_websocket(device_type: str, websocket: WebSocket):
                 try:
                     validated_data = validator_model.model_validate(data)
                 except Exception as exc:
+                    rejected = _validation_error_summary(exc)
+                    received_keys = (
+                        sorted(data.keys()) if isinstance(data, dict) else []
+                    )
+                    SENSOR_REJECTED.labels(role=role, reason="validation_failed").inc()
                     logger.warning(
-                        "[WS %s] Schema validation failed for %s/%s: %s",
+                        "[WS %s] Schema validation failed for %s/%s "
+                        "(device_type=%s): rejected=%s, received keys=%s.",
                         session_id,
                         physical_id,
                         role,
-                        exc,
+                        device_type,
+                        rejected,
+                        received_keys,
+                    )
+                    # Keep the receive loop non-blocking: schedule the
+                    # best-effort DB log instead of awaiting it inline. Mirrors
+                    # the CoAP handler's `sensor_anomaly` entries so rejected
+                    # measurements are visible in the logs table, not only in
+                    # container output.
+                    asyncio.create_task(
+                        best_effort_log(
+                            event_type="sensor_anomaly",
+                            severity="warning",
+                            description=(
+                                f"WS payload rejected for role='{role}' "
+                                f"(device_type={device_type}): "
+                                f"rejected={rejected}, "
+                                f"received keys={received_keys}."
+                            ),
+                        )
                     )
                     try:
                         await websocket.send_json(

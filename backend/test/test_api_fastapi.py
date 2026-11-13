@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4, uuid7
 from pathlib import Path
+import logging
 import sys
 
 import pytest
@@ -8,6 +9,7 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import main as main_module
 from main import app
 from schemas.hydroponic import HydroponicOut, MetaData, ResponseList
 from schemas.user import UserOut, UserRole
@@ -61,11 +63,104 @@ def test_health(client: TestClient):
     assert response.json() == {"status": "healthy"}
 
 
-def test_db_test(client: TestClient):
+def test_db_test_endpoint_is_not_exposed(client: TestClient):
+    """The unauthenticated /db-test probe was removed.
+
+    It existed only to prove the database was reachable, which /health/ready now
+    reports truthfully (HTTP 503 when the database is down) without opening a
+    database session on every anonymous request.
+    """
     response = client.get("/db-test")
 
+    assert response.status_code == 404
+
+
+def test_project_version_falls_back_loudly_when_pyproject_is_unreadable(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+):
+    """The version fallback is allowed, but it must never be silent."""
+    missing = Path("does-not-exist") / "pyproject.toml"
+    monkeypatch.setattr(main_module, "Path", lambda *_: missing)
+
+    with caplog.at_level(logging.WARNING, logger="main"):
+        version = main_module.get_project_version()
+
+    assert version == main_module.FALLBACK_PROJECT_VERSION
+    assert "falling back" in caplog.text
+
+
+class _FakeConnection:
+    def __init__(self, error: Exception | None = None):
+        self._error = error
+
+    async def execute(self, *_args, **_kwargs):
+        if self._error is not None:
+            raise self._error
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_exc):
+        return False
+
+
+class _FakeEngine:
+    """Minimal stand-in for the SQLAlchemy async engine used by /health/ready."""
+
+    def __init__(self, error: Exception | None = None):
+        self._error = error
+        self.connect_calls = 0
+
+    def connect(self):
+        self.connect_calls += 1
+        return _FakeConnection(self._error)
+
+
+def test_health_liveness_does_not_depend_on_database(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    """A database outage must not make the liveness probe fail."""
+    monkeypatch.setattr(
+        main_module, "engine", _FakeEngine(error=RuntimeError("db unreachable"))
+    )
+
+    response = client.get("/health")
+
     assert response.status_code == 200
-    assert response.json() == {"result": 1}
+    assert response.json() == {"status": "healthy"}
+
+
+def test_health_ready_reports_ok_when_database_reachable(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    fake_engine = _FakeEngine()
+    monkeypatch.setattr(main_module, "engine", fake_engine)
+
+    response = client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready", "checks": {"database": "ok"}}
+    assert fake_engine.connect_calls == 1
+
+
+def test_health_ready_returns_503_when_database_unavailable(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(
+        main_module,
+        "engine",
+        _FakeEngine(error=RuntimeError("connection refused to 10.0.0.5:5432")),
+    )
+
+    response = client.get("/health/ready")
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["status"] == "unavailable"
+    assert body["checks"]["database"] == "unreachable"
+    # The failure reason must never leak connection details to the caller.
+    assert "10.0.0.5" not in response.text
+    assert "connection refused" not in response.text.lower()
 
 
 def test_register_user_success(client: TestClient, monkeypatch: pytest.MonkeyPatch):

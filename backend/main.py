@@ -1,9 +1,9 @@
-from fastapi import FastAPI, Depends, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from prometheus_client import CONTENT_TYPE_LATEST
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
-from utils.deps import get_session
+from config.db import engine
 from utils.templates import templates
 import tomllib
 from pathlib import Path
@@ -20,6 +20,7 @@ from contextlib import asynccontextmanager
 from routes.coap_handler import HydroponicCoAPResource
 from utils.aggregator import aggregator
 from utils.pipeline import SnapshotPipeline, _NUM_WORKERS
+from utils.metrics import DATABASE_READY, render_metrics
 import logging
 import colorlog
 
@@ -42,15 +43,37 @@ logger = logging.getLogger(__name__)
 logging.getLogger("coap-server").setLevel(logging.WARNING)
 logging.getLogger("aiocoap").setLevel(logging.WARNING)
 
+# Last-resort version shown in the OpenAPI document when `pyproject.toml` cannot
+# be read. Keep it in sync with `backend/pyproject.toml`; a mismatch is reported
+# by the warning in get_project_version().
+FALLBACK_PROJECT_VERSION = "1.5.0"
 
-def get_project_version():
+
+def get_project_version() -> str:
+    """Read the API version from `backend/pyproject.toml`.
+
+    The fallback is deliberate and harmless: the version is only used for the
+    OpenAPI document (`FastAPI(version=...)`), so a missing or malformed
+    `pyproject.toml` must not prevent the API from starting. It is never
+    silent - the exception is logged as a warning - so a stale value in
+    `/docs` or the generated clients is traceable to this message instead of
+    being mistaken for a real release version.
+    """
     try:
         pyproject_path = Path(__file__).parent / "pyproject.toml"
         with open(pyproject_path, "rb") as f:
             pyproject_data = tomllib.load(f)
-            return pyproject_data["project"].get("version", "1.5.0")
+        return pyproject_data["project"]["version"]
     except Exception:
-        return "1.5.0"
+        logger.warning(
+            "Could not read the version from %s; falling back to %s for the "
+            "OpenAPI document. The reported API version may not match the "
+            "running release.",
+            Path(__file__).parent / "pyproject.toml",
+            FALLBACK_PROJECT_VERSION,
+            exc_info=True,
+        )
+        return FALLBACK_PROJECT_VERSION
 
 
 @asynccontextmanager
@@ -149,10 +172,49 @@ async def root(request: Request):
 
 @app.get("/health")
 async def health():
+    """Liveness probe: the process is up and serving HTTP.
+
+    Deliberately independent of PostgreSQL: a database outage must not make the
+    container look dead, otherwise the orchestrator would kill and restart a
+    perfectly healthy process instead of surfacing the dependency problem.
+    """
     return {"status": "healthy"}
 
 
-@app.get("/db-test")
-async def db_test(session: AsyncSession = Depends(get_session)):
-    result = await session.execute(text("SELECT 1"))
-    return {"result": result.scalar()}
+@app.get("/health/ready")
+async def health_ready():
+    """Readiness probe: the API can serve requests that require its dependencies.
+
+    Performs a lightweight ``SELECT 1`` against the configured database (the
+    same engine used by the request path, so the bundled and external database
+    topologies are both covered). Returns HTTP 503 when the database is
+    unreachable. The response never contains connection strings or credentials.
+    """
+    try:
+        async with engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+    except Exception:
+        DATABASE_READY.set(0)
+        logger.exception("[Health] Readiness probe failed: database unreachable.")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unavailable",
+                "checks": {"database": "unreachable"},
+            },
+        )
+
+    DATABASE_READY.set(1)
+    return {"status": "ready", "checks": {"database": "ok"}}
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus scrape endpoint for the application metrics (audit M-1).
+
+    Plain-text exposition format. Unauthenticated on purpose: it exposes only
+    low-cardinality counters/gauges (no user ids, device ids, or secrets) and
+    is meant to be reachable from the monitoring network, not the public
+    internet.
+    """
+    return Response(content=render_metrics(), media_type=CONTENT_TYPE_LATEST)

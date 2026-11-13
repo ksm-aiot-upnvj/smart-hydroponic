@@ -21,8 +21,13 @@ async def create_superuser():
     role = UserRole.SUPERADMIN.value
 
     if not username or not password:
-        logger.error("Missing environment variables for superuser creation.")
-        return
+        # A blank credential is a configuration error. Exiting non-zero makes
+        # entrypoint.sh (`set -e`) abort startup instead of booting an API with
+        # no usable administrator account.
+        raise RuntimeError(
+            "SUPERUSER_USERNAME and SUPERUSER_PASSWORD must both be set; "
+            "cannot bootstrap the superuser account."
+        )
 
     hashed_password = hash_password(password)
     async with Session() as session:
@@ -32,7 +37,7 @@ async def create_superuser():
                 {"username": username},
             )
             if existing_user.first():
-                logger.error("Username already exists.")
+                logger.info("Superuser '%s' already exists; nothing to do.", username)
                 return
 
             new_user = User(

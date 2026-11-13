@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 from utils.log_helpers import best_effort_log
+from utils.metrics import AUTOMATION_DEGRADED, BROADCAST_FAILURES, SNAPSHOT_PERSISTENCE
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,10 @@ class SnapshotPipeline:
         self.room = room
         self._workers: list[asyncio.Task] = []
         self._stop_event: asyncio.Event = asyncio.Event()
+        # Tracks whether automatic actuator decisions are currently suspended
+        # because the nutrition profile could not be resolved (H-3). Only the
+        # transitions are logged, so a sustained outage cannot flood the logs.
+        self._automation_degraded: bool = False
 
     # ------------------------------------------------------------------
     # Lifespan
@@ -103,11 +108,17 @@ class SnapshotPipeline:
                 lag,
             )
 
-        active_profile = await self.aggregator.get_cached_profile()
+        resolution = await self.aggregator.get_cached_profile()
 
         from utils.actuator_control import build_actuator_control_payload
 
-        actuator_payload = build_actuator_control_payload(snapshot_dict, active_profile)
+        actuator_payload = build_actuator_control_payload(
+            snapshot_dict,
+            resolution.profile,
+            profile_available=resolution.available,
+        )
+
+        await self._report_automation_degradation(actuator_payload, snapshot_dict)
 
         for k in ("pump_status", "light_status", "automation_status"):
             if k in actuator_payload:
@@ -153,15 +164,91 @@ class SnapshotPipeline:
                         "[Pipeline] Failed to write automation change log."
                     )
 
-        await self._broadcast_snapshot(snapshot_dict, actuator_payload)
-
-        logger.info(
-            "[Pipeline] Snapshot %s persisted & broadcast. Actuators: pump=%s, light=%s, auto=%s",
-            snapshot_dict.get("dataid"),
-            actuator_payload.get("pump_status"),
-            actuator_payload.get("light_status"),
-            actuator_payload.get("automation_status"),
+        await self._broadcast_snapshot(
+            snapshot_dict, actuator_payload, persisted=persisted
         )
+
+        if persisted:
+            logger.info(
+                "[Pipeline] Snapshot %s persisted & broadcast. "
+                "Actuators: pump=%s, light=%s, auto=%s",
+                snapshot_dict.get("dataid"),
+                actuator_payload.get("pump_status"),
+                actuator_payload.get("light_status"),
+                actuator_payload.get("automation_status"),
+            )
+        else:
+            # Persistence already logged an ERROR/CRITICAL with the failure
+            # context. This line must never claim the snapshot was persisted.
+            logger.error(
+                "[Pipeline] Snapshot %s NOT persisted (retries exhausted); "
+                "broadcast as transient, unpersisted data. "
+                "Actuators: pump=%s, light=%s, auto=%s",
+                snapshot_dict.get("dataid"),
+                actuator_payload.get("pump_status"),
+                actuator_payload.get("light_status"),
+                actuator_payload.get("automation_status"),
+            )
+
+    async def _report_automation_degradation(
+        self, actuator_payload: dict[str, Any], snapshot_dict: dict[str, Any]
+    ) -> None:
+        """Log automation being suspended or resumed (audit finding H-3).
+
+        Only state transitions are logged: while the nutrition profile cannot be
+        resolved every snapshot is degraded, and logging each one would flood
+        both stdout and the logs table. The skipped decision is never silently
+        swallowed — the transition itself is reported with full context.
+        """
+        degraded = bool(actuator_payload.get("automation_degraded"))
+        if degraded == self._automation_degraded:
+            return
+
+        self._automation_degraded = degraded
+        AUTOMATION_DEGRADED.set(1 if degraded else 0)
+        dataid = snapshot_dict.get("dataid")
+
+        if degraded:
+            reason = (
+                actuator_payload.get("automation_skip_reason")
+                or "nutrition profile unavailable"
+            )
+            logger.error(
+                "[Pipeline] Automation degraded (dataid=%s): %s. Automatic "
+                "actuator decisions are suspended; actuator state left unchanged.",
+                dataid,
+                reason,
+            )
+            try:
+                await best_effort_log(
+                    event_type="automation",
+                    severity="error",
+                    description=(
+                        f"Automation degraded: {reason}. Automatic actuator "
+                        "decisions are suspended; actuator state left unchanged."
+                    ),
+                    data_ref=str(dataid) if dataid is not None else None,
+                )
+            except Exception:
+                logger.exception("[Pipeline] Failed to write automation-degraded log.")
+        else:
+            logger.info(
+                "[Pipeline] Automation recovered (dataid=%s); automatic actuator "
+                "decisions resumed.",
+                dataid,
+            )
+            try:
+                await best_effort_log(
+                    event_type="automation",
+                    severity="info",
+                    description=(
+                        "Automation recovered: nutrition profile resolution "
+                        "succeeded; automatic actuator decisions resumed."
+                    ),
+                    data_ref=str(dataid) if dataid is not None else None,
+                )
+            except Exception:
+                logger.exception("[Pipeline] Failed to write automation-recovered log.")
 
     async def _persist_with_retry(self, snapshot_dict: dict[str, Any]) -> bool:
         from schemas import HydroponicIn
@@ -175,6 +262,7 @@ class SnapshotPipeline:
                     service = HydroponicService(session)
                     validated = HydroponicIn.model_validate(snapshot_dict)
                     await service.add_data(validated)
+                SNAPSHOT_PERSISTENCE.labels(result="success").inc()
                 return True
             except Exception as exc:
                 last_exc = exc
@@ -221,6 +309,7 @@ class SnapshotPipeline:
         if last_exc is not None:
             from schemas import HydroponicIn
 
+            SNAPSHOT_PERSISTENCE.labels(result="failure").inc()
             try:
                 HydroponicIn.model_validate(snapshot_dict)
             except Exception:
@@ -231,20 +320,13 @@ class SnapshotPipeline:
         self,
         snapshot_dict: dict[str, Any],
         actuator_payload: dict[str, Any],
+        persisted: bool = True,
     ) -> None:
         from utils.manager import manager
 
-        tasks = []
-
-        tasks.append(
-            asyncio.create_task(
-                manager.send_to_room(
-                    room=self.room,
-                    role="web-client",
-                    message=snapshot_dict,
-                )
-            )
-        )
+        # `persisted` is part of the real-time message contract so web clients
+        # can tell durable readings apart from transient, unpersisted data.
+        web_message = {**snapshot_dict, "persisted": persisted}
 
         actuator_broadcast = {
             k: v
@@ -256,22 +338,48 @@ class SnapshotPipeline:
                 "automation_status",
                 "moisture_avg",
                 "temperature_avg",
+                # Exposed so consumers can tell a suspended automation
+                # (nutrition profile unavailable) from a normal decision.
+                "automation_degraded",
             )
         }
-        tasks.append(
-            asyncio.create_task(
-                manager.send_to_room(
-                    room=self.room,
-                    role="actuator",
-                    message=actuator_broadcast,
-                )
-            )
-        )
 
-        try:
-            await asyncio.gather(*tasks, return_exceptions=True)
-        except Exception:
-            logger.exception("[Pipeline] Error during WS broadcast.")
+        targets = [
+            ("web-client", web_message),
+            ("actuator", actuator_broadcast),
+        ]
+        tasks = [
+            asyncio.create_task(
+                manager.send_to_room(room=self.room, role=role, message=message)
+            )
+            for role, message in targets
+        ]
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for (role, _message), result in zip(targets, results):
+            if isinstance(result, BaseException):
+                # `send_to_room` itself raised before returning a result; the
+                # manager's own per-client counters never ran for this call.
+                BROADCAST_FAILURES.labels(role=role, kind="error").inc()
+                logger.error(
+                    "[Pipeline] WS broadcast to role='%s' failed.",
+                    role,
+                    exc_info=result,
+                )
+                continue
+            if not result.has_clients:
+                logger.debug(
+                    "[Pipeline] No '%s' clients connected; snapshot not delivered.",
+                    role,
+                )
+            elif result.dropped:
+                logger.warning(
+                    "[Pipeline] Broadcast to role='%s' dropped %d/%d client(s) "
+                    "(send queue full).",
+                    role,
+                    result.dropped,
+                    result.eligible,
+                )
 
         try:
             from routes.coap_handler import HydroponicCoAPResource

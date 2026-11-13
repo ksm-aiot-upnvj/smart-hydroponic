@@ -1,14 +1,42 @@
 import asyncio
 import logging
 from collections import defaultdict
+from dataclasses import dataclass
 
 from fastapi import WebSocket
+
+from utils.metrics import BROADCAST_FAILURES
 
 logger = logging.getLogger(__name__)
 
 _SEND_TIMEOUT = 5.0
 
 _PER_CLIENT_QUEUE_MAXSIZE = 512
+
+
+@dataclass(frozen=True)
+class BroadcastResult:
+    """Outcome of a :meth:`RoomConnectionManager.send_to_room` broadcast.
+
+    A queued message only proves the payload was handed to a client's sender
+    task; it is NOT an acknowledgement. Callers that need proof of delivery
+    (for example actuator control) must not treat ``queued > 0`` as confirmed
+    execution.
+    """
+
+    eligible: int
+    queued: int
+    dropped: int
+
+    @property
+    def has_clients(self) -> bool:
+        """True when at least one client was connected for the room/role."""
+        return self.eligible > 0
+
+    @property
+    def fully_delivered(self) -> bool:
+        """True when every connected client accepted the message."""
+        return self.eligible > 0 and self.dropped == 0
 
 
 class _ClientState:
@@ -113,31 +141,60 @@ class RoomConnectionManager:
                     client_id,
                 )
 
-    async def send_to_room(self, room: str, role: str, message: dict) -> None:
+    async def send_to_room(
+        self, room: str, role: str, message: dict
+    ) -> BroadcastResult:
+        """Fan a message out to every client in a room/role.
+
+        Returns an explicit :class:`BroadcastResult` so callers can tell "nobody
+        was connected" apart from "the message was queued" and from "some
+        queues were full". A queued message is not an acknowledgement.
+        """
         async with self.lock:
             clients_snapshot = dict(self.rooms.get(room, {}).get(role, {}))
 
-        if not clients_snapshot:
-            return
+        eligible = len(clients_snapshot)
+        if eligible == 0:
+            return BroadcastResult(eligible=0, queued=0, dropped=0)
 
-        dead_clients: list[str] = []
+        failed_clients: list[str] = []
 
         async def _enqueue_one(cid: str, st: _ClientState):
             if not st.enqueue(message):
-                dead_clients.append(cid)
+                # Per-client send queue full: the message was dropped, not sent.
+                BROADCAST_FAILURES.labels(role=role, kind="dropped").inc()
+                failed_clients.append(cid)
 
         tasks = [
             asyncio.create_task(_enqueue_one(cid, st))
             for cid, st in clients_snapshot.items()
         ]
-        if tasks:
-            try:
-                await asyncio.gather(*tasks, return_exceptions=True)
-            except Exception:
-                logger.exception("[Manager] Unexpected error enqueuing broadcast.")
 
-        for cid in dead_clients:
+        # return_exceptions=True keeps one client's failure from aborting the
+        # broadcast to the others; each result is inspected below so failures
+        # are surfaced instead of silently dropped.
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for (cid, _st), result in zip(clients_snapshot.items(), results):
+            if isinstance(result, BaseException):
+                BROADCAST_FAILURES.labels(role=role, kind="error").inc()
+                logger.error(
+                    "[Manager] Enqueue failed for client '%s' (room='%s', role='%s').",
+                    cid,
+                    room,
+                    role,
+                    exc_info=result,
+                )
+                failed_clients.append(cid)
+
+        failed = set(failed_clients)
+        for cid in failed:
             await self.disconnect(room, role, cid)
+
+        return BroadcastResult(
+            eligible=eligible,
+            queued=eligible - len(failed),
+            dropped=len(failed),
+        )
 
     async def send_to_client(
         self, room: str, role: str, client_id: str, message: dict

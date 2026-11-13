@@ -352,6 +352,34 @@ void sendSensorData()
     Serial.println("---");
 }
 
+// ============================ COAP CODE DIAGNOSTIC ============================
+// Cetak kode respons CoAP sebagai "C.DD" beserta verdict singkat. Sebelumnya
+// kode ini diabaikan, sehingga data yang ditolak server (4.00/5.03) terlihat
+// sama seperti data yang diterima (2.04).
+void printCoapCode(uint8_t code)
+{
+    uint8_t codeClass = code >> 5;
+    uint8_t detail = code & 0x1F;
+
+    Serial.print("[RESPONSE] CoAP code: ");
+    Serial.print(codeClass);
+    Serial.print('.');
+    if (detail < 10)
+        Serial.print('0');
+    Serial.print(detail);
+
+    if (code == 0)
+        Serial.println(" (empty - ACK tanpa payload)");
+    else if (codeClass == 2)
+        Serial.println(" (sukses)");
+    else if (codeClass == 4)
+        Serial.println(" (ditolak server)");
+    else if (codeClass == 5)
+        Serial.println(" (error di server)");
+    else
+        Serial.println(" (tidak terduga)");
+}
+
 // ============================ COAP CALLBACK ============================
 void callback_response(CoapPacket &packet, IPAddress ip, int port)
 {
@@ -366,6 +394,7 @@ void callback_response(CoapPacket &packet, IPAddress ip, int port)
     Serial.print("[RESPONSE] Latency: ");
     Serial.print(latency);
     Serial.println(" ms");
+    printCoapCode(packet.code);
 
     if (packet.payloadlen > 0)
     {
@@ -378,6 +407,19 @@ void callback_response(CoapPacket &packet, IPAddress ip, int port)
     else
     {
         Serial.println("[RESPONSE] No payload");
+    }
+
+    // 2.04 Changed berarti server menyimpan/antre pembacaan. Selain itu
+    // pembacaan tidak diterima, jadi operator harus melihat log backend
+    // (cari 'Invalid JSON', 'Schema validation failed', atau 'rate_limited').
+    if (packet.code == 0x44)
+    {
+        Serial.println("[RESPONSE] Pembacaan diterima server (2.04 Changed).");
+    }
+    else if (packet.code >= 0x80)
+    {
+        Serial.println("[RESPONSE] Server TIDAK menerima pembacaan ini. "
+                       "Periksa log backend untuk alasan penolakan.");
     }
     Serial.println("---");
 }

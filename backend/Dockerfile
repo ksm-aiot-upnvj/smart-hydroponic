@@ -38,9 +38,13 @@ RUN sed -i 's/\r$//' /app/entrypoint.sh \
 
 EXPOSE 8000
 
-# Healthcheck yang lebih manusiawi (Standard Python)
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-	CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')" || exit 1
+# Readiness healthcheck: the container is healthy only when the API can reach
+# its database. /health stays a pure liveness probe (see backend/main.py) so a
+# database outage is reported as "unhealthy" instead of killing the process.
+# The startup grace period covers the bounded database wait in entrypoint.sh
+# plus `alembic upgrade head` and the superuser bootstrap.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+	CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')" || exit 1
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 

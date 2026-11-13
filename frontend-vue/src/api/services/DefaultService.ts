@@ -28,15 +28,4 @@ export class DefaultService {
       url: "/health",
     });
   }
-  /**
-   * Db Test
-   * @returns any Successful Response
-   * @throws ApiError
-   */
-  public static dbTestDbTestGet(): CancelablePromise<any> {
-    return __request(OpenAPI, {
-      method: "GET",
-      url: "/db-test",
-    });
-  }
 }
