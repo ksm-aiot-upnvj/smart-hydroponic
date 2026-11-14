@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.5.3 (2026-11-14)
+
+### Bug Fixes
+
+- **alembic**: Escape percent signs in database URL
+  ([`211b08a`](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/211b08a60b423666abe3b0775c1ea92c04a05835))
+
+
 ## v1.5.2 (2026-11-14)
 
 ### Bug Fixes
