@@ -13,7 +13,14 @@ config = context.config
 
 # Optionally override from env rather than alembic.ini
 if settings.DATABASE_URL:
-    config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+    # Alembic stores options in a ``configparser`` instance whose default
+    # interpolation treats ``%`` as the start of a substitution escape.
+    # Credentials are percent-encoded (``#`` -> ``%23``), so setting the URL
+    # verbatim raises "invalid interpolation syntax". Doubling the ``%`` masks
+    # it from the parser; ``get_main_option`` un-escapes it again on read.
+    config.set_main_option(
+        "sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%")
+    )
 
 # Logging
 if config.config_file_name is not None:
