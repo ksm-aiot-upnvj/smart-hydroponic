@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.5.2 (2026-11-14)
+
+### Bug Fixes
+
+- Encode database URL credentials safely
+  ([`36b7fbc`](https://github.com/ksm-aiot-upnvj/smart-hydroponic/commit/36b7fbca85bb56a7ae7f3bf749b86967dbcc66d6))
+
+
 ## v1.5.1 (2026-11-13)
 
 ### Bug Fixes
