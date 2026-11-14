@@ -202,18 +202,19 @@ Workflow rilis mem-push dua tag sekaligus ke Docker Hub
 | Tag | Contoh | Sifat |
 | --- | --- | --- |
 | `latest` | `ksmaiotupnvj/smart-hydroponic-backend:latest` | bergerak setiap rilis |
-| tag rilis | `ksmaiotupnvj/smart-hydroponic-backend:backend-v1.5.0` | tetap |
+| tag rilis | `ksmaiotupnvj/smart-hydroponic-backend:backend-v1.5.1` | tetap |
 
 Untuk deploy yang dapat direproduksi, isi `.env` dengan tag rilis:
 
 ```bash
-BACKEND_IMAGE_TAG=backend-v1.5.0
-FRONTEND_IMAGE_TAG=frontend-v1.5.0
+BACKEND_IMAGE_TAG=backend-v1.5.1
+FRONTEND_IMAGE_TAG=frontend-v1.5.1
 ```
 
-Bentuk paling ketat adalah digest image (`repo@sha256:...`, lihat
-`docker image inspect <image> --format '{{index .RepoDigests 0}}'`), karena
-digest tidak dapat ditimpa oleh push berikutnya. Setelah mengubah tag, jalankan
+`BACKEND_IMAGE_TAG` dan `FRONTEND_IMAGE_TAG` menerima tag, bukan digest;
+Compose menambahkan nilai itu setelah tanda titik dua pada nama image. Untuk
+menggunakan digest (`repo@sha256:...`), ubah referensi `image:` di Compose
+secara eksplisit. Setelah mengubah tag, jalankan
 `docker compose -f docker-compose.prod.yml --env-file .env up -d`.
 
 Rollback tidak otomatis membalik migration: turunkan tag image ke rilis
@@ -324,7 +325,8 @@ belum diverifikasi.
 
 ### Konfigurasi server yang teramati (read-only, tanpa perubahan)
 
-- Repository server berada di commit `c9f7c08`, sama dengan `main` lokal.
+- Saat audit read-only, repository server berada di commit `c9f7c08`. Ini
+  merupakan snapshot; verifikasi ulang revisi server sebelum cutover.
 - `database-service-ksm-aiot`: TimescaleDB `2.30.2-pg18`, `127.0.0.1:5434->5432`.
 - Deployment aplikasi yang sedang berjalan memublikasikan TCP `8000`, TCP
   `8080`, dan UDP `8683` pada semua interface. Compose yang disiapkan di atas
