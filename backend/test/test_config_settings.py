@@ -74,6 +74,14 @@ def test_database_url_is_built_from_parts_when_unset():
     )
 
 
+def test_database_url_escapes_reserved_credential_characters():
+    settings = make_settings(PGUSER="user@name", PGPASSWORD="p@ss:/word%")
+
+    assert settings.DATABASE_URL == (
+        "postgresql+asyncpg://user%40name:p%40ss%3A%2Fword%25@db:5432/hydroponic"
+    )
+
+
 def test_blank_database_url_is_treated_as_unset():
     # docker-compose sets DATABASE_URL="" on the containers so that a
     # host-oriented value from .env cannot win.

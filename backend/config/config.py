@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator, model_validator
+from sqlalchemy.engine import URL
 from typing import Self
 import re
 
@@ -125,10 +126,14 @@ class Settings(BaseSettings):
                     "Either DATABASE_URL must be set explicitly, or all of the "
                     f"following must be provided: {', '.join(missing)}"
                 )
-            self.DATABASE_URL = (
-                f"postgresql+asyncpg://{self.DATABASE_USER}:{self.DATABASE_PASSWORD}"
-                f"@{self.DATABASE_HOST}:{self.DATABASE_PORT}/{self.DATABASE_NAME}"
-            )
+            self.DATABASE_URL = URL.create(
+                "postgresql+asyncpg",
+                username=self.DATABASE_USER,
+                password=self.DATABASE_PASSWORD,
+                host=self.DATABASE_HOST,
+                port=self.DATABASE_PORT,
+                database=self.DATABASE_NAME,
+            ).render_as_string(hide_password=False)
         return self
 
 
