@@ -56,8 +56,13 @@ Jalankan dari root repository.
    docker compose -f docker-compose.prod.yml --env-file .env up -d
    ```
 
-   `--env-file .env` dipakai untuk interpolasi nilai seperti `PGUSER` pada blok
-   `environment:`. File `.env` juga dibaca container lewat `env_file:`.
+   `--env-file .env` menyediakan nilai untuk interpolasi Compose. Environment
+   runtime container dipetakan secara eksplisit di `docker-compose.prod.yml`;
+   file `.env` tidak di-mount ke container.
+   Sebelum menjalankan perintah produksi, isi juga `PROD_KEYS_DIR` dan
+   `PROD_ENTRYPOINT_PATH` di `.env` dengan path absolut yang ada pada Docker
+   host. Keduanya diperlukan untuk mempertahankan file key dan entrypoint
+   produksi yang saat ini di-mount.
 
 5. Cek status container.
 
@@ -77,17 +82,65 @@ Jalankan dari root repository.
 
 7. Buka health check.
 
-   ```text
-   http://alamat-server:8000/health
-   ```
-
-   Ganti `alamat-server` dengan domain atau IP server, misalnya `192.168.1.10` atau `hydroponic.example.com`.
-
-   Jika server memakai NGINX dengan prefix `/smart-hydroponic/api/v2`, URL publik dapat menjadi:
+   Dari server, cek bind lokal API:
 
    ```text
-   http://alamat-server/smart-hydroponic/api/v2/health
+   http://127.0.0.1:8000/health
    ```
+
+   Untuk cek dari luar server, gunakan URL publik melalui NGINX dengan prefix
+   `/smart-hydroponic/api/v2`, misalnya:
+
+   ```text
+   https://hydroponic.example.com/smart-hydroponic/api/v2/health
+   ```
+
+## Migrasi Pengelolaan ke Portainer
+
+Untuk mengelola deployment produksi melalui Portainer, gunakan **Stacks**
+reguler pada environment Docker `local`, bukan Edge Stacks. Pilih stack berbasis
+Git dan atur repository, branch, serta Compose path ke
+`docker-compose.prod.yml` di root repository. Network eksternal
+`ksm-aiot-network` dan database terpisah `database-service-ksm-aiot` harus tetap
+ada; stack ini tidak membuat atau mengubah database.
+
+Portainer Git stack tidak membaca `.env` yang diabaikan Git. Tambahkan nilai
+production sebagai environment variables stack di Portainer, tanpa memasukkan
+secret ke repository. Variabel wajib:
+
+- `PGUSER`, `PGPASSWORD`, `PGDATABASE`
+- `JWT_EXPIRES_IN`
+- `SUPERUSER_USERNAME`, `SUPERUSER_EMAIL`, `SUPERUSER_PASSWORD`
+- `PROD_KEYS_DIR`, path absolut direktori `keys` yang sudah ada di Docker host
+- `PROD_ENTRYPOINT_PATH`, path absolut file `entrypoint.sh` yang saat ini
+  dipasang oleh deployment produksi
+
+Gunakan nilai database dan superuser yang sama dengan deployment saat ini agar
+migrasi tidak sekaligus merotasi kredensial atau mengganti akun bootstrap.
+Jangan menyalin nilai rahasia ke Git, tiket, atau log. Opsi seperti
+`PROD_PGHOST`, `BACKEND_IMAGE_TAG`, `FRONTEND_IMAGE_TAG`,
+`PROD_CORS_ALLOW_ORIGINS`, dan tuning `HYDROPONIC_*` boleh ditambahkan bila
+nilainya perlu berbeda dari default Compose. Contoh path server saat ini ada
+sebagai komentar di `.env.example`; verifikasi kembali bahwa path tersebut
+masih benar di host Docker yang dikelola Portainer.
+
+Port TCP `8000` dan `8080` hanya diikat ke loopback untuk host NGINX, sedangkan
+UDP `8683` tetap dipublikasikan agar perangkat CoAP yang memakai IP publik tetap
+dapat tersambung. Pastikan aturan firewall provider mengizinkan UDP `8683`.
+
+!!! warning "Jangan deploy stack baru saat stack lama masih berjalan"
+
+    Deployment saat ini dibuat manual dan memakai nama container tetap
+    `hydroponic-backend` dan `hydroponic-frontend`. Deploy langsung dari
+    Portainer dapat berbenturan dengan nama tersebut atau mengganti container
+    yang sedang melayani trafik. Jangan membuat stack duplikat dan jangan
+    menghentikan stack lama sebagai bagian dari persiapan ini. Jadwalkan
+    cutover terpisah: verifikasi image yang sedang berjalan dan tag image yang
+    akan dipakai, environment serta path mount, network, dan routing NGINX;
+    lalu lakukan penggantian container dalam maintenance window dan periksa
+    health/log sebelum menganggap migrasi selesai. Entrypoint menjalankan
+    Alembic saat startup, jadi perubahan versi aplikasi/database harus menjadi
+    keputusan cutover yang disengaja, bukan efek samping migrasi pengelolaan.
 
 ## Cara Mengecek Berhasil
 
@@ -248,14 +301,15 @@ belum diverifikasi.
 ### Terverifikasi lokal
 
 - `docker compose -f docker-compose.dev.yml config --quiet` → exit `0`.
-- `docker compose -f docker-compose.prod.yml config --quiet` → exit `0`; port
-  `8000` dan `8683/udp` ter-bind ke `127.0.0.1`, mount `/app/keys` ada.
+- `docker compose -f docker-compose.prod.yml config --quiet` → exit `0` dengan
+  nilai valid untuk variabel wajib; TCP `8000` dan `8080` ter-bind ke
+  `127.0.0.1`, sedangkan UDP `8683` dipublikasikan untuk koneksi perangkat.
+  Mount host `/app/keys` dan `/app/entrypoint.sh` dikonfigurasi read-only.
 - `docker compose -f monitoring/docker-compose.yml config --quiet` → exit `0`.
 - `.env.example` memuat seluruh variabel yang benar-benar dibaca kode: `PG*`,
-  `JWT_PRIVATE_KEY`/`JWT_PUBLIC_KEY`, `SUPERUSER_*`, `CORS_ALLOW_ORIGINS`,
-  `COAP_HOST`, dan `HYDROPONIC_*`, ditambah variabel khusus Compose
-  (`DB_STARTUP_MAX_ATTEMPTS`, `DB_STARTUP_RETRY_INTERVAL`, `PROD_PGHOST`,
-  `BACKEND_IMAGE_TAG`, `FRONTEND_IMAGE_TAG`, `PROD_CORS_ALLOW_ORIGINS`).
+  `JWT_EXPIRES_IN`, `JWT_PRIVATE_KEY`/`JWT_PUBLIC_KEY`, `SUPERUSER_*`,
+  `CORS_ALLOW_ORIGINS`, `COAP_HOST`, dan `HYDROPONIC_*`, ditambah variabel
+  khusus Compose termasuk path bind production.
 
 ### Tes lokal yang lulus
 
@@ -272,7 +326,11 @@ belum diverifikasi.
 
 - Repository server berada di commit `c9f7c08`, sama dengan `main` lokal.
 - `database-service-ksm-aiot`: TimescaleDB `2.30.2-pg18`, `127.0.0.1:5434->5432`.
-- `api` dipublikasikan pada `127.0.0.1:8000` dan `127.0.0.1:8683/udp`.
+- Deployment aplikasi yang sedang berjalan memublikasikan TCP `8000`, TCP
+  `8080`, dan UDP `8683` pada semua interface. Compose yang disiapkan di atas
+  membatasi dua port TCP ke loopback dan mempertahankan UDP `8683` untuk device.
+- Docker/Compose diperiksa secara read-only melalui operator; tidak ada
+  perubahan pada server atau container selama persiapan Portainer ini.
 - Probe health read-only: `api /health` `200`, `mcp /health` `200`,
   `gateway /health/liveliness` `200`, `llama /health` `200`, `frontend /` `301`.
 - NGINX host (`sites-available/iot-hidroponik`) memetakan prefix seperti pada
@@ -280,9 +338,8 @@ belum diverifikasi.
 
 ### Belum diverifikasi (butuh otorisasi operator)
 
-- Inspeksi runtime Docker (`docker ps/inspect/logs/network`) terblokir karena
-  `sudo` memerlukan kata sandi.
-- Entrypoint container yang benar-benar berjalan dan log startup belum diperiksa.
+- Log startup container belum diperiksa. File `entrypoint.sh` yang di-mount
+  pada host berbeda dari `backend/entrypoint.sh` di repository.
 - Keberadaan dan isi `system_settings.intake_config` di database Orion belum
   diperiksa.
 - Portainer terekspos melalui HTTPS publik NGINX (`/portainer/` dan
