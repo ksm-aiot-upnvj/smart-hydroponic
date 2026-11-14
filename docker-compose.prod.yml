@@ -10,10 +10,14 @@
 #     waits for the database itself (backend/entrypoint.sh) and surfaces
 #     readiness through its Dockerfile HEALTHCHECK.
 #
-# Deploy:
+# Deploy with the root `.env` for Compose interpolation:
 #   docker network create ksm-aiot-network      # once, only if it does not exist
 #   docker compose -f docker-compose.prod.yml --env-file .env up -d
 #   docker compose -f docker-compose.prod.yml ps
+#
+# Portainer Git stacks should load the production `.env` values into the stack
+# environment. This file maps runtime settings explicitly because the Git
+# checkout does not contain the ignored `.env` file.
 #
 # Never run `docker compose down -v` for this file: the named volumes holding
 # database data belong to the other project and must survive routine redeploys.
@@ -33,20 +37,31 @@ services:
     # unhandled failure that monitoring and `docker compose ps` must surface.
     # A restart policy never replaces alerting.
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       # PROD_PGHOST is the database's DNS name on ksm-aiot-network. Confirm it
       # with `docker network inspect ksm-aiot-network` before the first deploy.
       PGHOST: ${PROD_PGHOST:-database-service-ksm-aiot}
       PGPORT: ${POSTGRES_INTERNAL_PORT:-5432}
-      PGUSER: ${PGUSER}
-      PGPASSWORD: ${PGPASSWORD}
-      PGDATABASE: ${PGDATABASE}
+      PGUSER: ${PGUSER:?Set PGUSER in the production environment}
+      PGPASSWORD: ${PGPASSWORD:?Set PGPASSWORD in the production environment}
+      PGDATABASE: ${PGDATABASE:?Set PGDATABASE in the production environment}
       # Blanked so Settings rebuilds the URL from the values above instead of
-      # reusing a host-oriented URL (e.g. localhost:5434) from .env.
+      # reusing a host-oriented value (e.g. localhost:5433) from `.env`.
       DATABASE_URL: ""
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:?Set JWT_EXPIRES_IN in the production environment}
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:-keys/private.pem}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-keys/public.pem}
+      SUPERUSER_USERNAME: ${SUPERUSER_USERNAME:?Set SUPERUSER_USERNAME in the production environment}
+      SUPERUSER_EMAIL: ${SUPERUSER_EMAIL:?Set SUPERUSER_EMAIL in the production environment}
+      SUPERUSER_PASSWORD: ${SUPERUSER_PASSWORD:?Set SUPERUSER_PASSWORD in the production environment}
+      SUPERUSER_ROLE: ${SUPERUSER_ROLE:-superadmin}
+      DB_STARTUP_MAX_ATTEMPTS: ${DB_STARTUP_MAX_ATTEMPTS:-30}
+      DB_STARTUP_RETRY_INTERVAL: ${DB_STARTUP_RETRY_INTERVAL:-2}
       COAP_HOST: "0.0.0.0"
+      HYDROPONIC_MIN_INTERVAL_SECONDS: ${HYDROPONIC_MIN_INTERVAL_SECONDS:-0.1}
+      HYDROPONIC_PAIR_TIMEOUT_SECONDS: ${HYDROPONIC_PAIR_TIMEOUT_SECONDS:-60.0}
+      HYDROPONIC_MOISTURE_THRESHOLD: ${HYDROPONIC_MOISTURE_THRESHOLD:-60}
+      HYDROPONIC_TEMPERATURE_THRESHOLD: ${HYDROPONIC_TEMPERATURE_THRESHOLD:-30.0}
       # The production browser reaches this API through the frontend container's
       # nginx (`/smart-hydroponic/` -> api:8000, see frontend-vue/nginx.conf), so
       # requests are same-origin and no CORS header is required. This is
@@ -58,15 +73,28 @@ services:
       CORS_ALLOW_ORIGINS: ${PROD_CORS_ALLOW_ORIGINS:-}
     # Bound to loopback on purpose: the host NGINX (site `iot-hidroponik`)
     # terminates TLS and proxies /smart-hydroponic/api/v2/ to 127.0.0.1:8000.
-    # Publishing on 0.0.0.0 would expose the API and CoAP port directly.
+    # Publishing the HTTP API on 0.0.0.0 would expose it directly.
+    # ESP firmware connects to the server's public IP on UDP 8683, so that
+    # CoAP port must remain externally reachable; restrict its source in the
+    # provider firewall when device addresses are stable.
     ports:
       - "127.0.0.1:8000:8000"
-      - "127.0.0.1:8683:8683/udp"
+      - "8683:8683/udp"
     volumes:
       # Required: backend/utils/crypto.py reads these files at import time and
-      # raises RuntimeError if they are missing, and `.env` points at the
-      # relative path `keys/private.pem` (WORKDIR is /app).
-      - ./keys:/app/keys:ro
+      # raises RuntimeError if they are missing. The host directory is outside
+      # the Portainer Git checkout because `keys/` is not committed.
+      - type: bind
+        source: "${PROD_KEYS_DIR:?Set PROD_KEYS_DIR to the host keys directory}"
+        target: /app/keys
+        read_only: true
+      # Preserve the current host-managed entrypoint during migration. It
+      # intentionally overrides the image entrypoint and must be reconciled
+      # before this mount is removed.
+      - type: bind
+        source: "${PROD_ENTRYPOINT_PATH:?Set PROD_ENTRYPOINT_PATH to the host entrypoint file}"
+        target: /app/entrypoint.sh
+        read_only: true
     networks:
       - ksm-aiot-network
 
@@ -78,7 +106,7 @@ services:
     container_name: hydroponic-frontend
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     depends_on:
       - api
     networks:
