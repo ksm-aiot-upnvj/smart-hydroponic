@@ -18,9 +18,7 @@ if settings.DATABASE_URL:
     # Credentials are percent-encoded (``#`` -> ``%23``), so setting the URL
     # verbatim raises "invalid interpolation syntax". Doubling the ``%`` masks
     # it from the parser; ``get_main_option`` un-escapes it again on read.
-    config.set_main_option(
-        "sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%")
-    )
+    config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 # Logging
 if config.config_file_name is not None:
