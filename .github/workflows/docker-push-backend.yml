@@ -69,3 +69,69 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/${{ matrix.name }}:${{ steps.release_tag.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy and verify backend
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    concurrency:
+      group: portainer-smart-hydroponic-deploy
+      queue: max
+    steps:
+      - name: Trigger Portainer deployment
+        shell: bash
+        env:
+          PORTAINER_WEBHOOK: ${{ secrets.PORTAINER_SMART_HYDROPONIC_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$PORTAINER_WEBHOOK" ]]; then
+            echo "::error::PORTAINER_SMART_HYDROPONIC_WEBHOOK_URL is not configured."
+            exit 1
+          fi
+
+          http_status="$(curl --silent --show-error --output /dev/null \
+            --write-out '%{http_code}' --connect-timeout 10 --max-time 30 \
+            --request POST "$PORTAINER_WEBHOOK")"
+
+          if [[ "$http_status" != "200" && "$http_status" != "204" ]]; then
+            echo "::error::Portainer webhook returned HTTP $http_status."
+            exit 1
+          fi
+
+          echo "Portainer accepted the deployment trigger (HTTP $http_status)."
+
+      - name: Wait for backend readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          health_url="https://aiot.fik.upnvj.ac.id/smart-hydroponic/api/v2/health/ready"
+          timeout_seconds=180
+          poll_interval_seconds=10
+          required_successes=3
+          consecutive_successes=0
+          elapsed=0
+
+          sleep 10
+          elapsed=10
+          while (( elapsed < timeout_seconds )); do
+            if response="$(curl --silent --show-error --fail \
+              --connect-timeout 3 --max-time 5 "$health_url" 2>/dev/null)" \
+              && jq -e '.status == "ready" and .checks.database == "ok"' \
+                >/dev/null <<< "$response"; then
+              ((consecutive_successes += 1))
+              if (( consecutive_successes >= required_successes )); then
+                echo "Backend is ready and its database check is healthy."
+                exit 0
+              fi
+            else
+              consecutive_successes=0
+            fi
+
+            sleep "$poll_interval_seconds"
+            ((elapsed += poll_interval_seconds))
+          done
+
+          echo "::error::Backend did not become ready within ${timeout_seconds}s."
+          exit 1
